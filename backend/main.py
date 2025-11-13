@@ -147,6 +147,60 @@ async def websocket_console(websocket: WebSocket):
         await websocket.close()
 
 
+# Performance Profiler Endpoints
+@app.get("/api/profiler/metrics")
+async def get_profiler_metrics():
+    """Get current performance metrics"""
+    try:
+        return mc_manager.get_profiler_metrics()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/profiler/history")
+async def get_profiler_history(duration: int = 60):
+    """Get performance history"""
+    try:
+        return mc_manager.get_profiler_history(duration)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/profiler/statistics")
+async def get_profiler_statistics():
+    """Get performance statistics"""
+    try:
+        return mc_manager.get_profiler_statistics()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/profiler/alerts")
+async def get_profiler_alerts():
+    """Get performance alerts"""
+    try:
+        return mc_manager.get_profiler_alerts()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/profiler")
+async def websocket_profiler(websocket: WebSocket):
+    """WebSocket endpoint for real-time performance metrics"""
+    await websocket.accept()
+    try:
+        # Send performance metrics in real-time
+        async for metrics in mc_manager.stream_profiler_metrics():
+            import json
+            await websocket.send_text(json.dumps(metrics))
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        await websocket.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application on startup"""

@@ -73,6 +73,8 @@ class CraftServerApp {
                     this.loadFiles();
                 } else if (targetId === 'modrinth') {
                     // Modrinth section loaded
+                } else if (targetId === 'performance') {
+                    this.initPerformanceMonitoring();
                 }
             });
         });
@@ -1198,6 +1200,391 @@ class CraftServerApp {
         } catch (error) {
             console.error('Failed to create modpack server:', error);
             this.showNotification('모드팩 서버 생성에 실패했습니다', 'error');
+        }
+    }
+
+    // Performance Monitoring
+    initPerformanceMonitoring() {
+        if (this.performanceInitialized) return;
+        this.performanceInitialized = true;
+
+        // Initialize charts
+        this.initPerformanceCharts();
+
+        // Connect to performance WebSocket
+        this.connectPerformanceWebSocket();
+
+        // Load initial statistics
+        this.loadPerformanceStatistics();
+    }
+
+    initPerformanceCharts() {
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 750
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: 'var(--text-secondary)'
+                    }
+                },
+                x: {
+                    display: false
+                }
+            }
+        };
+
+        // TPS Chart
+        const tpsCtx = document.getElementById('tpsChart');
+        if (tpsCtx) {
+            this.tpsChart = new Chart(tpsCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'TPS',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        ...chartOptions.scales,
+                        y: {
+                            ...chartOptions.scales.y,
+                            max: 20,
+                            ticks: {
+                                ...chartOptions.scales.y.ticks,
+                                callback: (value) => value.toFixed(1)
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // CPU Chart
+        const cpuCtx = document.getElementById('cpuChart');
+        if (cpuCtx) {
+            this.cpuChart = new Chart(cpuCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#4facfe',
+                        backgroundColor: 'rgba(79, 172, 254, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        ...chartOptions.scales,
+                        y: {
+                            ...chartOptions.scales.y,
+                            max: 100,
+                            ticks: {
+                                ...chartOptions.scales.y.ticks,
+                                callback: (value) => value + '%'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Memory Chart
+        const memoryCtx = document.getElementById('memoryChart');
+        if (memoryCtx) {
+            this.memoryChart = new Chart(memoryCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Memory %',
+                        data: [],
+                        borderColor: '#fa709a',
+                        backgroundColor: 'rgba(250, 112, 154, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        ...chartOptions.scales,
+                        y: {
+                            ...chartOptions.scales.y,
+                            max: 100,
+                            ticks: {
+                                ...chartOptions.scales.y.ticks,
+                                callback: (value) => value + '%'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Tick Time Chart
+        const tickTimeCtx = document.getElementById('tickTimeChart');
+        if (tickTimeCtx) {
+            this.tickTimeChart = new Chart(tickTimeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'MSPT',
+                        data: [],
+                        borderColor: '#f093fb',
+                        backgroundColor: 'rgba(240, 147, 251, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        ...chartOptions.scales,
+                        y: {
+                            ...chartOptions.scales.y,
+                            max: 100,
+                            ticks: {
+                                ...chartOptions.scales.y.ticks,
+                                callback: (value) => value + 'ms'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        this.performanceData = {
+            timestamps: [],
+            tps: [],
+            cpu: [],
+            memory: [],
+            tickTime: []
+        };
+        this.maxDataPoints = 60; // Keep 60 seconds of data
+    }
+
+    connectPerformanceWebSocket() {
+        if (this.perfWs) {
+            this.perfWs.close();
+        }
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/profiler`;
+
+        this.perfWs = new WebSocket(wsUrl);
+
+        this.perfWs.onopen = () => {
+            console.log('Performance WebSocket connected');
+        };
+
+        this.perfWs.onmessage = (event) => {
+            const metrics = JSON.parse(event.data);
+            this.updatePerformanceMetrics(metrics);
+        };
+
+        this.perfWs.onerror = (error) => {
+            console.error('Performance WebSocket error:', error);
+        };
+
+        this.perfWs.onclose = () => {
+            console.log('Performance WebSocket closed');
+            // Reconnect after 5 seconds if performance tab is active
+            setTimeout(() => {
+                const perfSection = document.getElementById('performance');
+                if (perfSection && perfSection.classList.contains('active')) {
+                    this.connectPerformanceWebSocket();
+                }
+            }, 5000);
+        };
+    }
+
+    updatePerformanceMetrics(metrics) {
+        // Update current metric displays
+        document.getElementById('tpsValue').textContent = metrics.tps?.toFixed(1) || '20.0';
+        document.getElementById('tickTimeValue').textContent = metrics.tick_time_ms?.toFixed(1) + ' ms' || '0 ms';
+        document.getElementById('cpuValue').textContent = metrics.cpu_percent?.toFixed(1) + '%' || '0%';
+        document.getElementById('memoryValue').textContent = metrics.memory_percent?.toFixed(1) + '%' || '0%';
+
+        const memUsed = metrics.memory_used_mb?.toFixed(0) || 0;
+        const memMax = metrics.memory_max_mb?.toFixed(0) || 0;
+        document.getElementById('memorySubtitle').textContent = `${memUsed} MB / ${memMax} MB`;
+
+        // Update performance status badge
+        const statusBadge = document.querySelector('#performanceStatus .status-badge');
+        if (statusBadge) {
+            statusBadge.className = 'status-badge ' + (metrics.status || 'excellent');
+            const statusTexts = {
+                'excellent': '최적',
+                'good': '양호',
+                'fair': '보통',
+                'poor': '불량'
+            };
+            statusBadge.textContent = statusTexts[metrics.status] || '최적';
+        }
+
+        // Update charts
+        const now = new Date().toLocaleTimeString();
+
+        // Add new data
+        this.performanceData.timestamps.push(now);
+        this.performanceData.tps.push(metrics.tps || 20);
+        this.performanceData.cpu.push(metrics.cpu_percent || 0);
+        this.performanceData.memory.push(metrics.memory_percent || 0);
+        this.performanceData.tickTime.push(metrics.tick_time_ms || 0);
+
+        // Remove old data if exceeds max points
+        if (this.performanceData.timestamps.length > this.maxDataPoints) {
+            this.performanceData.timestamps.shift();
+            this.performanceData.tps.shift();
+            this.performanceData.cpu.shift();
+            this.performanceData.memory.shift();
+            this.performanceData.tickTime.shift();
+        }
+
+        // Update charts
+        if (this.tpsChart) {
+            this.tpsChart.data.labels = this.performanceData.timestamps;
+            this.tpsChart.data.datasets[0].data = this.performanceData.tps;
+            this.tpsChart.update('none'); // Update without animation for smoother updates
+        }
+
+        if (this.cpuChart) {
+            this.cpuChart.data.labels = this.performanceData.timestamps;
+            this.cpuChart.data.datasets[0].data = this.performanceData.cpu;
+            this.cpuChart.update('none');
+        }
+
+        if (this.memoryChart) {
+            this.memoryChart.data.labels = this.performanceData.timestamps;
+            this.memoryChart.data.datasets[0].data = this.performanceData.memory;
+            this.memoryChart.update('none');
+        }
+
+        if (this.tickTimeChart) {
+            this.tickTimeChart.data.labels = this.performanceData.timestamps;
+            this.tickTimeChart.data.datasets[0].data = this.performanceData.tickTime;
+            this.tickTimeChart.update('none');
+        }
+
+        // Update alerts
+        this.updatePerformanceAlerts();
+    }
+
+    async updatePerformanceAlerts() {
+        try {
+            const alerts = await this.apiCall('/profiler/alerts');
+            const alertsContainer = document.getElementById('performanceAlerts');
+
+            if (alerts && alerts.length > 0) {
+                alertsContainer.innerHTML = alerts.map(alert => `
+                    <div class="alert alert-${alert.level}">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>${alert.message}</span>
+                    </div>
+                `).join('');
+            } else {
+                alertsContainer.innerHTML = '';
+            }
+        } catch (error) {
+            console.error('Failed to load alerts:', error);
+        }
+    }
+
+    async loadPerformanceStatistics() {
+        try {
+            const stats = await this.apiCall('/profiler/statistics');
+            const statsContainer = document.getElementById('performanceStats');
+
+            if (stats && Object.keys(stats).length > 0) {
+                statsContainer.innerHTML = `
+                    <table class="stats-table">
+                        <thead>
+                            <tr>
+                                <th>측정 항목</th>
+                                <th>현재</th>
+                                <th>평균</th>
+                                <th>최소</th>
+                                <th>최대</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${stats.tps ? `
+                            <tr>
+                                <td>TPS</td>
+                                <td>${stats.tps.current}</td>
+                                <td>${stats.tps.avg}</td>
+                                <td>${stats.tps.min}</td>
+                                <td>${stats.tps.max}</td>
+                            </tr>
+                            ` : ''}
+                            ${stats.cpu ? `
+                            <tr>
+                                <td>CPU (%)</td>
+                                <td>${stats.cpu.current}%</td>
+                                <td>${stats.cpu.avg}%</td>
+                                <td>${stats.cpu.min}%</td>
+                                <td>${stats.cpu.max}%</td>
+                            </tr>
+                            ` : ''}
+                            ${stats.memory ? `
+                            <tr>
+                                <td>메모리 (%)</td>
+                                <td>${stats.memory.current}%</td>
+                                <td>${stats.memory.avg}%</td>
+                                <td>${stats.memory.min}%</td>
+                                <td>${stats.memory.max}%</td>
+                            </tr>
+                            ` : ''}
+                            ${stats.tick_time ? `
+                            <tr>
+                                <td>틱 시간 (ms)</td>
+                                <td>${stats.tick_time.current}ms</td>
+                                <td>${stats.tick_time.avg}ms</td>
+                                <td>${stats.tick_time.min}ms</td>
+                                <td>${stats.tick_time.max}ms</td>
+                            </tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            // Reload statistics every 10 seconds
+            setTimeout(() => {
+                const perfSection = document.getElementById('performance');
+                if (perfSection && perfSection.classList.contains('active')) {
+                    this.loadPerformanceStatistics();
+                }
+            }, 10000);
+        } catch (error) {
+            console.error('Failed to load performance statistics:', error);
         }
     }
 }

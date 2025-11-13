@@ -21,6 +21,7 @@ from .models import (
 from .modrinth_client import ModrinthClient
 from .curseforge_client import CurseForgeClient
 from .spigot_client import SpigotClient
+from .profiler import PerformanceProfiler
 
 
 class MinecraftManager:
@@ -40,6 +41,7 @@ class MinecraftManager:
         self.modrinth_client = ModrinthClient()
         self.curseforge_client = CurseForgeClient()
         self.spigot_client = SpigotClient()
+        self.profiler = PerformanceProfiler()
 
     async def initialize(self):
         """Initialize the manager"""
@@ -63,6 +65,10 @@ class MinecraftManager:
         # Start scheduler
         self.scheduler.start()
         self._load_scheduled_tasks()
+
+        # Initialize and start profiler
+        await self.profiler.initialize()
+        await self.profiler.start_monitoring()
 
     async def _download_server_jar(self):
         """Download Minecraft server jar"""
@@ -320,6 +326,9 @@ class MinecraftManager:
                 while True:
                     line = f.readline()
                     if line:
+                        # Feed to profiler for TPS/MSPT parsing
+                        self.profiler.parse_tps_from_log(line)
+                        self.profiler.parse_mspt_from_log(line)
                         yield line
                     else:
                         await asyncio.sleep(0.1)
@@ -329,6 +338,10 @@ class MinecraftManager:
         if self.is_running():
             await self.stop_server()
         self.scheduler.shutdown()
+        await self.profiler.cleanup()
+        await self.modrinth_client.close()
+        await self.curseforge_client.close()
+        await self.spigot_client.close()
 
     # Player Management
     async def get_players(self) -> List[Player]:
@@ -1044,3 +1057,27 @@ class MinecraftManager:
             "game_version": self.config.minecraft_version,
             "mods_installed": len(list(mods_dir.glob("*.jar")))
         }
+
+    # Performance Profiler Methods
+    def get_profiler_metrics(self) -> Dict[str, Any]:
+        """Get current profiler metrics"""
+        return self.profiler.get_current_metrics()
+
+    def get_profiler_history(self, duration_seconds: int = 60) -> Dict[str, Any]:
+        """Get profiler history metrics"""
+        return self.profiler.get_history_metrics(duration_seconds)
+
+    def get_profiler_statistics(self) -> Dict[str, Any]:
+        """Get profiler statistics"""
+        return self.profiler.get_statistics()
+
+    def get_profiler_alerts(self) -> List[Dict[str, Any]]:
+        """Get performance alerts"""
+        return self.profiler.get_alerts()
+
+    async def stream_profiler_metrics(self) -> AsyncIterator[Dict[str, Any]]:
+        """Stream profiler metrics in real-time"""
+        while True:
+            metrics = self.get_profiler_metrics()
+            yield metrics
+            await asyncio.sleep(1)  # Send metrics every second

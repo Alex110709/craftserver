@@ -25,6 +25,7 @@
             <div class="nav-links">
                 <a href="#dashboard" class="nav-link active">대시보드</a>
                 <a href="#console" class="nav-link">콘솔</a>
+                <a href="#performance" class="nav-link">성능</a>
                 <a href="#players" class="nav-link">플레이어</a>
                 <a href="#worlds" class="nav-link">월드</a>
                 <a href="#modrinth" class="nav-link">모드/플러그인</a>
@@ -190,6 +191,112 @@
                 <div class="console-input">
                     <input type="text" id="commandInput" placeholder="명령어 입력..." disabled>
                     <button id="sendCommand" class="btn btn-primary" disabled>전송</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance Section -->
+        <section id="performance" class="section">
+            <div class="section-header">
+                <h2>성능 분석</h2>
+                <div class="performance-status" id="performanceStatus">
+                    <span class="status-badge excellent">최적</span>
+                </div>
+            </div>
+
+            <!-- Performance Alerts -->
+            <div id="performanceAlerts" class="alerts-container"></div>
+
+            <!-- Current Metrics -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">TPS (Ticks Per Second)</span>
+                        <span class="metric-value" id="tpsValue">20.0</span>
+                        <span class="metric-subtitle">목표: 20 TPS</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">틱 시간 (MSPT)</span>
+                        <span class="metric-value" id="tickTimeValue">0 ms</span>
+                        <span class="metric-subtitle">목표: ~50ms</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                            <path d="M2 17L12 22L22 17"/>
+                            <path d="M2 12L12 17L22 12"/>
+                        </svg>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">CPU 사용률</span>
+                        <span class="metric-value" id="cpuValue">0%</span>
+                        <span class="metric-subtitle" id="cpuSubtitle">평균: 0%</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">메모리 사용률</span>
+                        <span class="metric-value" id="memoryValue">0%</span>
+                        <span class="metric-subtitle" id="memorySubtitle">0 MB / 0 MB</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Charts -->
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <h3>TPS (실시간)</h3>
+                    <canvas id="tpsChart" width="400" height="200"></canvas>
+                </div>
+
+                <div class="card chart-card">
+                    <h3>CPU 사용률 (실시간)</h3>
+                    <canvas id="cpuChart" width="400" height="200"></canvas>
+                </div>
+
+                <div class="card chart-card">
+                    <h3>메모리 사용률 (실시간)</h3>
+                    <canvas id="memoryChart" width="400" height="200"></canvas>
+                </div>
+
+                <div class="card chart-card">
+                    <h3>틱 시간 (실시간)</h3>
+                    <canvas id="tickTimeChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Performance Statistics -->
+            <div class="card">
+                <h3>통계</h3>
+                <div class="stats-table" id="performanceStats">
+                    <div class="empty-state">
+                        <p>통계 데이터를 수집하는 중...</p>
+                    </div>
                 </div>
             </div>
         </section>
@@ -586,6 +693,7 @@
         </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
