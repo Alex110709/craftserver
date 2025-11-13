@@ -338,15 +338,30 @@ async def delete_file(path: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Modrinth Endpoints
+# Multi-Source Endpoints
+@app.get("/api/projects/search")
+async def search_projects(
+    query: str,
+    source: str = "modrinth",  # modrinth, curseforge, spigot, all
+    project_type: Optional[str] = None
+) -> List[ModrinthProject]:
+    """Search for mods/plugins/datapacks from multiple sources"""
+    try:
+        return await mc_manager.search_projects(query, source, project_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Modrinth Endpoints (kept for backwards compatibility)
 @app.get("/api/modrinth/search")
 async def search_modrinth(
     query: str,
-    project_type: Optional[str] = None
+    project_type: Optional[str] = None,
+    source: str = "modrinth"  # Added source parameter
 ) -> List[ModrinthProject]:
-    """Search Modrinth for mods/plugins/datapacks"""
+    """Search for mods/plugins/datapacks"""
     try:
-        return await mc_manager.search_modrinth(query, project_type)
+        return await mc_manager.search_projects(query, source, project_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -874,9 +874,10 @@ class CraftServerApp {
         }
     }
 
-    // Modrinth Integration
+    // Multi-Source Integration
     async searchModrinth() {
         const query = document.getElementById('modrinthSearch').value;
+        const source = document.getElementById('searchSource').value || 'modrinth';
         const projectType = document.getElementById('projectType').value;
 
         if (!query) {
@@ -886,11 +887,11 @@ class CraftServerApp {
 
         try {
             const projects = await this.apiCall(
-                `/modrinth/search?query=${encodeURIComponent(query)}${projectType ? `&project_type=${projectType}` : ''}`
+                `/projects/search?query=${encodeURIComponent(query)}&source=${source}${projectType ? `&project_type=${projectType}` : ''}`
             );
             this.displaySearchResults(projects);
         } catch (error) {
-            console.error('Failed to search Modrinth:', error);
+            console.error('Failed to search:', error);
         }
     }
 
@@ -901,6 +902,18 @@ class CraftServerApp {
             searchResults.innerHTML = '<div class="empty-state"><p>검색 결과가 없습니다</p></div>';
             return;
         }
+
+        const sourceLabels = {
+            'modrinth': 'Modrinth',
+            'curseforge': 'CurseForge',
+            'spigot': 'Spigot'
+        };
+
+        const sourceColors = {
+            'modrinth': '#1BD96A',
+            'curseforge': '#F16436',
+            'spigot': '#FFB61C'
+        };
 
         searchResults.innerHTML = projects.map(project => `
             <div class="mod-card">
@@ -916,10 +929,11 @@ class CraftServerApp {
                 <p class="mod-description">${project.description}</p>
                 <div class="mod-meta">
                     <span class="mod-badge">${project.project_type}</span>
+                    <span class="mod-badge" style="background-color: ${sourceColors[project.source] || '#666'}33; color: ${sourceColors[project.source] || '#999'};">${sourceLabels[project.source] || project.source}</span>
                     <span>📥 ${this.formatDownloads(project.downloads)}</span>
                 </div>
                 <div class="mod-actions">
-                    <button class="btn btn-success" onclick="app.showInstallModal('${project.id}', '${project.title}', '${project.project_type}')">
+                    <button class="btn btn-success" onclick="app.showInstallModal('${project.id}', '${project.title}', '${project.project_type}', '${project.source}')">
                         설치
                     </button>
                 </div>
@@ -927,8 +941,8 @@ class CraftServerApp {
         `).join('');
     }
 
-    async showInstallModal(projectId, projectName, projectType) {
-        this.currentInstallProject = { id: projectId, name: projectName, type: projectType };
+    async showInstallModal(projectId, projectName, projectType, source) {
+        this.currentInstallProject = { id: projectId, name: projectName, type: projectType, source: source || 'modrinth' };
         document.getElementById('installProjectName').textContent = projectName;
         document.getElementById('installModal').style.display = 'flex';
 
@@ -1054,6 +1068,7 @@ class CraftServerApp {
     // Modpack Management
     async searchModpacks() {
         const query = document.getElementById('modpackSearch').value;
+        const source = document.getElementById('modpackSource').value || 'modrinth';
         const loader = document.getElementById('modpackLoader').value;
 
         if (!query) {
@@ -1062,7 +1077,7 @@ class CraftServerApp {
         }
 
         try {
-            let url = `/modrinth/search?query=${encodeURIComponent(query)}&project_type=modpack`;
+            let url = `/projects/search?query=${encodeURIComponent(query)}&source=${source}&project_type=modpack`;
             if (loader) {
                 url += `&loader=${loader}`;
             }
@@ -1082,6 +1097,16 @@ class CraftServerApp {
             return;
         }
 
+        const sourceLabels = {
+            'modrinth': 'Modrinth',
+            'curseforge': 'CurseForge'
+        };
+
+        const sourceColors = {
+            'modrinth': '#1BD96A',
+            'curseforge': '#F16436'
+        };
+
         modpackResults.innerHTML = modpacks.map(modpack => `
             <div class="mod-card">
                 <div class="mod-header">
@@ -1096,10 +1121,11 @@ class CraftServerApp {
                 <p class="mod-description">${modpack.description}</p>
                 <div class="mod-meta">
                     <span class="mod-badge">모드팩</span>
+                    <span class="mod-badge" style="background-color: ${sourceColors[modpack.source] || '#666'}33; color: ${sourceColors[modpack.source] || '#999'};">${sourceLabels[modpack.source] || modpack.source}</span>
                     <span>📥 ${this.formatDownloads(modpack.downloads)}</span>
                 </div>
                 <div class="mod-actions">
-                    <button class="btn btn-success" onclick="app.showModpackModal('${modpack.id}', '${modpack.title.replace(/'/g, "\\'")}')">
+                    <button class="btn btn-success" onclick="app.showModpackModal('${modpack.id}', '${modpack.title.replace(/'/g, "\\'")}', '${modpack.source}')">
                         서버 생성
                     </button>
                 </div>
@@ -1107,8 +1133,8 @@ class CraftServerApp {
         `).join('');
     }
 
-    async showModpackModal(modpackId, modpackName) {
-        this.currentModpack = { id: modpackId, name: modpackName };
+    async showModpackModal(modpackId, modpackName, source) {
+        this.currentModpack = { id: modpackId, name: modpackName, source: source || 'modrinth' };
         document.getElementById('modpackName').textContent = modpackName;
         document.getElementById('modpackServerName').value = modpackName + ' Server';
         document.getElementById('modpackModal').style.display = 'flex';

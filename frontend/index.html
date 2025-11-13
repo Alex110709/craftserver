@@ -275,7 +275,13 @@
             <div class="tab-content active" id="search-tab">
                 <div class="card">
                     <div class="search-bar">
-                        <input type="text" id="modrinthSearch" placeholder="Modrinth에서 검색...">
+                        <input type="text" id="modrinthSearch" placeholder="모드, 플러그인, 데이터팩 검색...">
+                        <select id="searchSource">
+                            <option value="all">모든 소스</option>
+                            <option value="modrinth">Modrinth</option>
+                            <option value="curseforge">CurseForge</option>
+                            <option value="spigot">Spigot</option>
+                        </select>
                         <select id="projectType">
                             <option value="">모든 타입</option>
                             <option value="mod">모드</option>
@@ -298,6 +304,11 @@
                 <div class="card">
                     <div class="search-bar">
                         <input type="text" id="modpackSearch" placeholder="모드팩 검색...">
+                        <select id="modpackSource">
+                            <option value="modrinth">Modrinth</option>
+                            <option value="curseforge">CurseForge</option>
+                            <option value="all">모든 소스</option>
+                        </select>
                         <select id="modpackLoader">
                             <option value="">모든 로더</option>
                             <option value="forge">Forge</option>

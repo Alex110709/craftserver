@@ -19,6 +19,8 @@ from .models import (
     ModrinthProject, ModrinthVersion, InstalledMod
 )
 from .modrinth_client import ModrinthClient
+from .curseforge_client import CurseForgeClient
+from .spigot_client import SpigotClient
 
 
 class MinecraftManager:
@@ -36,6 +38,8 @@ class MinecraftManager:
         self.scheduler = AsyncIOScheduler()
         self.scheduled_tasks: Dict[str, ScheduledTask] = {}
         self.modrinth_client = ModrinthClient()
+        self.curseforge_client = CurseForgeClient()
+        self.spigot_client = SpigotClient()
 
     async def initialize(self):
         """Initialize the manager"""
@@ -635,7 +639,35 @@ class MinecraftManager:
         elif target_path.is_dir():
             shutil.rmtree(target_path)
 
-    # Modrinth Integration
+    # Multi-Source Integration
+    async def search_projects(
+        self,
+        query: str,
+        source: str = "modrinth",  # modrinth, curseforge, spigot, all
+        project_type: Optional[str] = None,
+        categories: Optional[List[str]] = None
+    ) -> List[ModrinthProject]:
+        """Search for mods/plugins/datapacks from multiple sources"""
+        results = []
+
+        if source == "all":
+            # Search all sources and combine results
+            modrinth_results = await self.search_modrinth(query, project_type, categories)
+            curseforge_results = await self.search_curseforge(query, project_type)
+            if project_type in ["plugin", None]:
+                spigot_results = await self.search_spigot(query)
+                results = modrinth_results + curseforge_results + spigot_results
+            else:
+                results = modrinth_results + curseforge_results
+        elif source == "modrinth":
+            results = await self.search_modrinth(query, project_type, categories)
+        elif source == "curseforge":
+            results = await self.search_curseforge(query, project_type)
+        elif source == "spigot":
+            results = await self.search_spigot(query)
+
+        return results
+
     async def search_modrinth(
         self,
         query: str,
@@ -668,7 +700,90 @@ class MinecraftManager:
                 downloads=hit["downloads"],
                 icon_url=hit.get("icon_url"),
                 author=hit.get("author", "Unknown"),
-                versions=hit.get("versions", [])
+                versions=hit.get("versions", []),
+                source="modrinth"
+            ))
+
+        return projects
+
+    async def search_curseforge(
+        self,
+        query: str,
+        project_type: Optional[str] = None
+    ) -> List[ModrinthProject]:
+        """Search CurseForge for mods/modpacks"""
+        category_map = {
+            "mod": self.curseforge_client.categories.get("mods"),
+            "modpack": self.curseforge_client.categories.get("modpacks"),
+            "plugin": self.curseforge_client.categories.get("bukkit_plugins")
+        }
+
+        category_id = category_map.get(project_type) if project_type else None
+
+        result = await self.curseforge_client.search(
+            query,
+            category_id=category_id,
+            game_version=self.config.minecraft_version
+        )
+
+        projects = []
+        for item in result.get("data", []):
+            # Map CurseForge data to our model
+            authors = item.get("authors", [])
+            author = authors[0].get("name", "Unknown") if authors else "Unknown"
+
+            # Determine project type from categories
+            categories = item.get("categories", [])
+            cf_project_type = "mod"
+            for cat in categories:
+                cat_id = cat.get("classId")
+                if cat_id == self.curseforge_client.categories.get("modpacks"):
+                    cf_project_type = "modpack"
+                elif cat_id == self.curseforge_client.categories.get("bukkit_plugins"):
+                    cf_project_type = "plugin"
+
+            projects.append(ModrinthProject(
+                id=str(item["id"]),
+                slug=item.get("slug", ""),
+                title=item["name"],
+                description=item.get("summary", ""),
+                categories=[cat.get("name", "") for cat in categories],
+                project_type=cf_project_type,
+                downloads=item.get("downloadCount", 0),
+                icon_url=item.get("logo", {}).get("thumbnailUrl"),
+                author=author,
+                versions=[],
+                source="curseforge"
+            ))
+
+        return projects
+
+    async def search_spigot(self, query: str) -> List[ModrinthProject]:
+        """Search Spigot for plugins"""
+        results = await self.spigot_client.search(query)
+
+        projects = []
+        for item in results:
+            # Get author info
+            author_info = item.get("author", {})
+            author = author_info.get("name", "Unknown") if isinstance(author_info, dict) else "Unknown"
+
+            # Get icon
+            icon = item.get("icon", {})
+            icon_url = icon.get("url") if isinstance(icon, dict) else None
+
+            projects.append(ModrinthProject(
+                id=str(item["id"]),
+                slug=item.get("name", "").lower().replace(" ", "-"),
+                title=item["name"],
+                description=item.get("tag", ""),
+                categories=item.get("category", {}).get("name", "").split() if item.get("category") else [],
+                project_type="plugin",
+                downloads=item.get("downloads", 0),
+                icon_url=f"https://www.spigotmc.org/{icon_url}" if icon_url else None,
+                author=author,
+                versions=[],
+                source="spigot"
             ))
 
         return projects

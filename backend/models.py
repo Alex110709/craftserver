@@ -124,6 +124,7 @@ class ModrinthProject(BaseModel):
     icon_url: Optional[str] = None
     author: str
     versions: Optional[List[str]] = None
+    source: str = "modrinth"  # modrinth, curseforge, spigot
 
 
 class ModrinthVersion(BaseModel):
