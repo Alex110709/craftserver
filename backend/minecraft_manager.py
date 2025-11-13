@@ -27,10 +27,15 @@ from .profiler import PerformanceProfiler
 class MinecraftManager:
     """Manager for Minecraft server operations"""
 
-    def __init__(self):
-        self.minecraft_dir = Path("/app/minecraft")
-        self.backups_dir = Path("/app/backups")
-        self.logs_dir = Path("/app/logs")
+    def __init__(
+        self,
+        minecraft_dir: Optional[Path] = None,
+        backups_dir: Optional[Path] = None,
+        logs_dir: Optional[Path] = None
+    ):
+        self.minecraft_dir = minecraft_dir or Path("/app/minecraft")
+        self.backups_dir = backups_dir or Path("/app/backups")
+        self.logs_dir = logs_dir or Path("/app/logs")
         self.server_process: Optional[subprocess.Popen] = None
         self.start_time: Optional[float] = None
         self.config: ServerConfig = ServerConfig()

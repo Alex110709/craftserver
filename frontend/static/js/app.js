@@ -5,11 +5,14 @@ class CraftServerApp {
         this.apiBase = '';
         this.ws = null;
         this.updateInterval = null;
+        this.currentServerId = null;
+        this.servers = [];
         this.init();
     }
 
     init() {
         this.initTheme();
+        this.loadServers();  // Load servers first
         this.setupNavigation();
         this.setupEventListeners();
         this.setupTabs();
@@ -82,6 +85,30 @@ class CraftServerApp {
 
     // Event Listeners
     setupEventListeners() {
+        // Server management
+        const serverSelect = document.getElementById('serverSelect');
+        if (serverSelect) {
+            serverSelect.addEventListener('change', (e) => this.selectServer(e.target.value));
+        }
+
+        const manageServersBtn = document.getElementById('manageServersBtn');
+        if (manageServersBtn) {
+            manageServersBtn.addEventListener('click', () => this.openServerManagement());
+        }
+
+        const createServerBtn = document.getElementById('createServerBtn');
+        if (createServerBtn) {
+            createServerBtn.addEventListener('click', () => this.openCreateServerModal());
+        }
+
+        const createServerForm = document.getElementById('createServerForm');
+        if (createServerForm) {
+            createServerForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.createServer();
+            });
+        }
+
         // Control buttons
         document.getElementById('startBtn').addEventListener('click', () => this.startServer());
         document.getElementById('stopBtn').addEventListener('click', () => this.stopServer());
@@ -1585,6 +1612,129 @@ class CraftServerApp {
             }, 10000);
         } catch (error) {
             console.error('Failed to load performance statistics:', error);
+        }
+    }
+
+    // Server Management
+    async loadServers() {
+        try {
+            const data = await this.apiCall('/servers');
+            this.servers = data.servers;
+            this.currentServerId = data.current_server_id;
+
+            // Update server selector dropdown
+            const serverSelect = document.getElementById('serverSelect');
+            if (serverSelect) {
+                serverSelect.innerHTML = this.servers.map(server => `
+                    <option value="${server.id}" ${server.id === this.currentServerId ? 'selected' : ''}>
+                        ${server.name} (${server.port})
+                    </option>
+                `).join('');
+            }
+        } catch (error) {
+            console.error('Failed to load servers:', error);
+        }
+    }
+
+    async selectServer(serverId) {
+        try {
+            await this.apiCall(`/servers/${serverId}/select`, 'POST');
+            this.currentServerId = serverId;
+            this.showNotification('서버가 선택되었습니다', 'success');
+
+            // Refresh current view
+            await this.updateStatus();
+            await this.loadConfig();
+        } catch (error) {
+            console.error('Failed to select server:', error);
+            this.showNotification('서버 선택에 실패했습니다', 'error');
+        }
+    }
+
+    openServerManagement() {
+        document.getElementById('serverManagementModal').style.display = 'flex';
+        this.loadServersList();
+    }
+
+    async loadServersList() {
+        const serversList = document.getElementById('serversList');
+
+        if (this.servers.length === 0) {
+            serversList.innerHTML = '<div class="empty-state"><p>서버가 없습니다</p></div>';
+            return;
+        }
+
+        serversList.innerHTML = this.servers.map(server => `
+            <div class="server-item ${server.id === this.currentServerId ? 'active' : ''}">
+                <div class="server-info">
+                    <h4>${server.name}</h4>
+                    <p>포트: ${server.port} | 생성일: ${new Date(server.created_at).toLocaleDateString()}</p>
+                </div>
+                <div class="server-actions">
+                    ${server.id === this.currentServerId ?
+                        '<span class="badge">현재 서버</span>' :
+                        `<button class="btn btn-sm btn-primary" onclick="app.selectServerFromList('${server.id}')">선택</button>`
+                    }
+                    ${this.servers.length > 1 ?
+                        `<button class="btn btn-sm btn-danger" onclick="app.deleteServerConfirm('${server.id}', '${server.name}')">삭제</button>` :
+                        ''
+                    }
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async selectServerFromList(serverId) {
+        await this.selectServer(serverId);
+        await this.loadServersList();
+    }
+
+    async deleteServerConfirm(serverId, serverName) {
+        if (confirm(`정말로 "${serverName}" 서버를 삭제하시겠습니까?`)) {
+            try {
+                await this.apiCall(`/servers/${serverId}`, 'DELETE');
+                this.showNotification('서버가 삭제되었습니다', 'success');
+                await this.loadServers();
+                await this.loadServersList();
+            } catch (error) {
+                console.error('Failed to delete server:', error);
+                this.showNotification('서버 삭제에 실패했습니다', 'error');
+            }
+        }
+    }
+
+    openCreateServerModal() {
+        document.getElementById('serverManagementModal').style.display = 'none';
+        document.getElementById('createServerModal').style.display = 'flex';
+    }
+
+    async createServer() {
+        const name = document.getElementById('newServerName').value;
+        const port = document.getElementById('newServerPort').value;
+        const version = document.getElementById('newServerVersion').value;
+        const serverType = document.getElementById('newServerType').value;
+
+        try {
+            const data = {
+                name: name,
+                minecraft_version: version,
+                server_type: serverType
+            };
+
+            if (port) {
+                data.port = parseInt(port);
+            }
+
+            await this.apiCall('/servers', 'POST', data);
+            this.showNotification('서버가 생성되었습니다', 'success');
+
+            document.getElementById('createServerModal').style.display = 'none';
+            document.getElementById('createServerForm').reset();
+
+            await this.loadServers();
+        } catch (error) {
+            console.error('Failed to create server:', error);
+            this.showNotification('서버 생성에 실패했습니다', 'error');
         }
     }
 }

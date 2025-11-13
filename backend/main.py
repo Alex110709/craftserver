@@ -9,13 +9,14 @@ import os
 from pathlib import Path
 
 from .minecraft_manager import MinecraftManager
+from .server_manager import ServerManager
 from .models import (
     ServerStatus, ServerConfig, BackupInfo, Player, PlayerInventory,
     WorldInfo, ScheduledTask, FileEntry, PlayerAction, ModrinthProject,
     ModrinthVersion, InstalledMod
 )
 
-app = FastAPI(title="CraftServer Manager", version="1.0.0")
+app = FastAPI(title="CraftServer Manager", version="2.0.0")
 
 # CORS middleware
 app.add_middleware(
@@ -26,8 +27,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Minecraft Manager
-mc_manager = MinecraftManager()
+# Initialize Server Manager (manages multiple Minecraft servers)
+server_manager = ServerManager()
+
+
+# Helper function to get current manager
+async def get_current_manager(server_id: Optional[str] = None) -> MinecraftManager:
+    """Get the MinecraftManager for the specified or current server"""
+    manager = await server_manager.get_manager(server_id)
+    if manager is None:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return manager
 
 # Mount static files
 frontend_path = Path(__file__).parent.parent / "frontend"
@@ -41,103 +51,210 @@ async def read_root():
     return FileResponse(str(index_file))
 
 
+# Server Management Endpoints
+@app.get("/api/servers")
+async def list_servers():
+    """List all servers"""
+    try:
+        servers = server_manager.list_servers()
+        current_id = server_manager.get_current_server_id()
+        return {
+            "servers": servers,
+            "current_server_id": current_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/servers/{server_id}")
+async def get_server(server_id: str):
+    """Get server information"""
+    try:
+        server = server_manager.get_server_info(server_id)
+        if server is None:
+            raise HTTPException(status_code=404, detail="Server not found")
+        return server
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/servers")
+async def create_server(server_data: dict):
+    """Create a new server"""
+    try:
+        name = server_data.get("name", "New Server")
+        port = server_data.get("port")
+        minecraft_version = server_data.get("minecraft_version", "1.20.1")
+        server_type = server_data.get("server_type", "vanilla")
+
+        server = await server_manager.create_server(
+            name=name,
+            port=port,
+            minecraft_version=minecraft_version,
+            server_type=server_type
+        )
+        return {"status": "success", "server": server}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/servers/{server_id}")
+async def delete_server(server_id: str):
+    """Delete a server"""
+    try:
+        success = await server_manager.delete_server(server_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Server not found")
+        return {"status": "success", "message": "Server deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/servers/{server_id}/select")
+async def select_server(server_id: str):
+    """Select a server as the current active server"""
+    try:
+        success = server_manager.set_current_server(server_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Server not found")
+        return {"status": "success", "current_server_id": server_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/servers/{server_id}")
+async def update_server(server_id: str, update_data: dict):
+    """Update server information"""
+    try:
+        name = update_data.get("name")
+        port = update_data.get("port")
+
+        success = await server_manager.update_server_info(
+            server_id=server_id,
+            name=name,
+            port=port
+        )
+        if not success:
+            raise HTTPException(status_code=404, detail="Server not found")
+        return {"status": "success", "message": "Server updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/status")
-async def get_status() -> ServerStatus:
+async def get_status(server_id: Optional[str] = None) -> ServerStatus:
     """Get current server status"""
-    return mc_manager.get_status()
+    manager = await get_current_manager(server_id)
+    return manager.get_status()
 
 
 @app.post("/api/server/start")
-async def start_server():
+async def start_server(server_id: Optional[str] = None):
     """Start the Minecraft server"""
     try:
-        await mc_manager.start_server()
+        manager = await get_current_manager(server_id)
+        await manager.start_server()
         return {"status": "success", "message": "Server starting..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/server/stop")
-async def stop_server():
+async def stop_server(server_id: Optional[str] = None):
     """Stop the Minecraft server"""
     try:
-        await mc_manager.stop_server()
+        manager = await get_current_manager(server_id)
+        await manager.stop_server()
         return {"status": "success", "message": "Server stopping..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/server/restart")
-async def restart_server():
+async def restart_server(server_id: Optional[str] = None):
     """Restart the Minecraft server"""
     try:
-        await mc_manager.restart_server()
+        manager = await get_current_manager(server_id)
+        await manager.restart_server()
         return {"status": "success", "message": "Server restarting..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/server/command")
-async def send_command(command: dict):
+async def send_command(command: dict, server_id: Optional[str] = None):
     """Send command to Minecraft server console"""
     try:
+        manager = await get_current_manager(server_id)
         cmd = command.get("command", "")
-        await mc_manager.send_command(cmd)
+        await manager.send_command(cmd)
         return {"status": "success", "message": f"Command sent: {cmd}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/config")
-async def get_config() -> ServerConfig:
+async def get_config(server_id: Optional[str] = None) -> ServerConfig:
     """Get server configuration"""
-    return mc_manager.get_config()
+    manager = await get_current_manager(server_id)
+    return manager.get_config()
 
 
 @app.post("/api/config")
-async def update_config(config: ServerConfig):
+async def update_config(config: ServerConfig, server_id: Optional[str] = None):
     """Update server configuration"""
     try:
-        mc_manager.update_config(config)
+        manager = await get_current_manager(server_id)
+        manager.update_config(config)
         return {"status": "success", "message": "Configuration updated"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/backups")
-async def list_backups() -> List[BackupInfo]:
+async def list_backups(server_id: Optional[str] = None) -> List[BackupInfo]:
     """List all available backups"""
-    return mc_manager.list_backups()
+    manager = await get_current_manager(server_id)
+    return manager.list_backups()
 
 
 @app.post("/api/backup")
-async def create_backup():
+async def create_backup(server_id: Optional[str] = None):
     """Create a new backup"""
     try:
-        backup_name = await mc_manager.create_backup()
+        manager = await get_current_manager(server_id)
+        backup_name = await manager.create_backup()
         return {"status": "success", "message": "Backup created", "backup": backup_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/backup/restore")
-async def restore_backup(backup: dict):
+async def restore_backup(backup: dict, server_id: Optional[str] = None):
     """Restore from a backup"""
     try:
+        manager = await get_current_manager(server_id)
         backup_name = backup.get("name", "")
-        await mc_manager.restore_backup(backup_name)
+        await manager.restore_backup(backup_name)
         return {"status": "success", "message": f"Restored from backup: {backup_name}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.websocket("/ws/console")
-async def websocket_console(websocket: WebSocket):
+async def websocket_console(websocket: WebSocket, server_id: Optional[str] = None):
     """WebSocket endpoint for real-time console logs"""
     await websocket.accept()
     try:
+        manager = await get_current_manager(server_id)
         # Start sending console logs
-        async for log_line in mc_manager.stream_console_logs():
+        async for log_line in manager.stream_console_logs():
             await websocket.send_text(log_line)
     except WebSocketDisconnect:
         pass
@@ -149,48 +266,53 @@ async def websocket_console(websocket: WebSocket):
 
 # Performance Profiler Endpoints
 @app.get("/api/profiler/metrics")
-async def get_profiler_metrics():
+async def get_profiler_metrics(server_id: Optional[str] = None):
     """Get current performance metrics"""
     try:
-        return mc_manager.get_profiler_metrics()
+        manager = await get_current_manager(server_id)
+        return manager.get_profiler_metrics()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/profiler/history")
-async def get_profiler_history(duration: int = 60):
+async def get_profiler_history(duration: int = 60, server_id: Optional[str] = None):
     """Get performance history"""
     try:
-        return mc_manager.get_profiler_history(duration)
+        manager = await get_current_manager(server_id)
+        return manager.get_profiler_history(duration)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/profiler/statistics")
-async def get_profiler_statistics():
+async def get_profiler_statistics(server_id: Optional[str] = None):
     """Get performance statistics"""
     try:
-        return mc_manager.get_profiler_statistics()
+        manager = await get_current_manager(server_id)
+        return manager.get_profiler_statistics()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/profiler/alerts")
-async def get_profiler_alerts():
+async def get_profiler_alerts(server_id: Optional[str] = None):
     """Get performance alerts"""
     try:
-        return mc_manager.get_profiler_alerts()
+        manager = await get_current_manager(server_id)
+        return manager.get_profiler_alerts()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.websocket("/ws/profiler")
-async def websocket_profiler(websocket: WebSocket):
+async def websocket_profiler(websocket: WebSocket, server_id: Optional[str] = None):
     """WebSocket endpoint for real-time performance metrics"""
     await websocket.accept()
     try:
+        manager = await get_current_manager(server_id)
         # Send performance metrics in real-time
-        async for metrics in mc_manager.stream_profiler_metrics():
+        async for metrics in manager.stream_profiler_metrics():
             import json
             await websocket.send_text(json.dumps(metrics))
     except WebSocketDisconnect:
@@ -204,13 +326,15 @@ async def websocket_profiler(websocket: WebSocket):
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application on startup"""
-    await mc_manager.initialize()
+    # Server manager is already initialized
+    # Individual servers are loaded lazily as needed
+    pass
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    await mc_manager.cleanup()
+    await server_manager.cleanup()
 
 
 # Player Management Endpoints

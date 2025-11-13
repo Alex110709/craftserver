@@ -22,6 +22,17 @@
                 </svg>
                 <h1>CraftServer</h1>
             </div>
+            <div class="server-selector">
+                <select id="serverSelect" class="server-select">
+                    <option value="">서버 로딩 중...</option>
+                </select>
+                <button id="manageServersBtn" class="btn-icon" title="서버 관리">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="10" cy="10" r="3"/>
+                        <path d="M10 1v2m0 14v2M3.93 3.93l1.41 1.41m9.9 9.9l1.41 1.41M1 10h2m14 0h2M3.93 16.07l1.41-1.41m9.9-9.9l1.41-1.41"/>
+                    </svg>
+                </button>
+            </div>
             <div class="nav-links">
                 <a href="#dashboard" class="nav-link active">대시보드</a>
                 <a href="#console" class="nav-link">콘솔</a>
@@ -692,6 +703,75 @@
             </div>
         </section>
     </main>
+
+    <!-- Server Management Modal -->
+    <div id="serverManagementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>서버 관리</h2>
+                <button class="modal-close" onclick="document.getElementById('serverManagementModal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <button id="createServerBtn" class="btn btn-primary" style="margin-bottom: 1rem;">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 5v10M5 10h10"/>
+                    </svg>
+                    새 서버 생성
+                </button>
+
+                <div id="serversList" class="servers-list">
+                    <div class="empty-state">
+                        <p>서버 목록을 불러오는 중...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Server Modal -->
+    <div id="createServerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>새 서버 생성</h2>
+                <button class="modal-close" onclick="document.getElementById('createServerModal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createServerForm">
+                    <div class="form-group">
+                        <label for="newServerName">서버 이름</label>
+                        <input type="text" id="newServerName" placeholder="My Minecraft Server" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newServerPort">포트 (선택사항)</label>
+                        <input type="number" id="newServerPort" placeholder="25565">
+                        <small>비워두면 자동으로 할당됩니다</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newServerVersion">Minecraft 버전</label>
+                        <input type="text" id="newServerVersion" value="1.20.1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newServerType">서버 타입</label>
+                        <select id="newServerType">
+                            <option value="vanilla">Vanilla</option>
+                            <option value="paper">Paper</option>
+                            <option value="spigot">Spigot</option>
+                            <option value="forge">Forge</option>
+                            <option value="fabric">Fabric</option>
+                        </select>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('createServerModal').style.display='none'">취소</button>
+                        <button type="submit" class="btn btn-primary">생성</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/static/js/app.js"></script>
