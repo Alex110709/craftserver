@@ -37,6 +37,14 @@ class CraftServerApp {
                 // Load section data
                 if (targetId === 'backups') {
                     this.loadBackups();
+                } else if (targetId === 'players') {
+                    this.loadPlayers();
+                } else if (targetId === 'worlds') {
+                    this.loadWorlds();
+                } else if (targetId === 'tasks') {
+                    this.loadTasks();
+                } else if (targetId === 'files') {
+                    this.loadFiles();
                 }
             });
         });
@@ -63,6 +71,22 @@ class CraftServerApp {
 
         // Backup button
         document.getElementById('createBackupBtn').addEventListener('click', () => this.createBackup());
+
+        // Players buttons
+        document.getElementById('refreshPlayersBtn').addEventListener('click', () => this.loadPlayers());
+
+        // Worlds button
+        document.getElementById('refreshWorldsBtn').addEventListener('click', () => this.loadWorlds());
+
+        // Tasks buttons
+        document.getElementById('createTaskBtn').addEventListener('click', () => this.openTaskModal());
+        const taskType = document.getElementById('taskType');
+        if (taskType) {
+            taskType.addEventListener('change', (e) => {
+                const commandGroup = document.getElementById('taskCommandGroup');
+                commandGroup.style.display = e.target.value === 'command' ? 'block' : 'none';
+            });
+        }
     }
 
     // WebSocket Connection
@@ -415,6 +439,382 @@ class CraftServerApp {
             toast.style.animation = 'slideOut 0.3s ease-out';
             setTimeout(() => toast.remove(), 300);
         }, 3000);
+    }
+
+    // Players Management
+    async loadPlayers() {
+        try {
+            const [allPlayers, onlinePlayers] = await Promise.all([
+                this.apiCall('/players'),
+                this.apiCall('/players/online')
+            ]);
+            this.displayPlayers(allPlayers, onlinePlayers);
+        } catch (error) {
+            console.error('Failed to load players:', error);
+        }
+    }
+
+    displayPlayers(allPlayers, onlinePlayers) {
+        const onlineList = document.getElementById('onlinePlayersList');
+        const allList = document.getElementById('allPlayersList');
+
+        // Online players
+        if (onlinePlayers.length === 0) {
+            onlineList.innerHTML = '<div class="empty-state"><p>온라인 플레이어가 없습니다</p></div>';
+        } else {
+            onlineList.innerHTML = onlinePlayers.map(player => this.playerItemHTML(player, true)).join('');
+        }
+
+        // All players
+        if (allPlayers.length === 0) {
+            allList.innerHTML = '<div class="empty-state"><p>플레이어 정보가 없습니다</p></div>';
+        } else {
+            allList.innerHTML = allPlayers.map(player => this.playerItemHTML(player, false)).join('');
+        }
+    }
+
+    playerItemHTML(player, isOnline) {
+        return `
+            <div class="player-item" onclick="app.openPlayerModal('${player.name}')">
+                <div class="player-info">
+                    <div class="player-avatar"></div>
+                    <div class="player-details">
+                        <div class="player-name">${player.name}</div>
+                        <div class="player-meta">
+                            UUID: ${player.uuid.substring(0, 8)}...
+                            ${!isOnline && player.last_seen ? ` • 마지막 접속: ${new Date(player.last_seen).toLocaleString('ko-KR')}` : ''}
+                        </div>
+                    </div>
+                </div>
+                <span class="player-status ${isOnline ? 'online' : 'offline'}">
+                    ${isOnline ? '온라인' : '오프라인'}
+                </span>
+            </div>
+        `;
+    }
+
+    openPlayerModal(playerName) {
+        this.currentPlayer = playerName;
+        document.getElementById('modalPlayerName').textContent = playerName;
+        document.getElementById('playerModal').style.display = 'flex';
+    }
+
+    closePlayerModal() {
+        document.getElementById('playerModal').style.display = 'none';
+    }
+
+    async kickPlayer() {
+        try {
+            await this.apiCall(`/players/${this.currentPlayer}/action`, 'POST', {
+                action: 'kick',
+                params: { reason: '관리자에 의해 킥됨' }
+            });
+            this.showNotification(`${this.currentPlayer}를 킥했습니다`, 'success');
+            this.closePlayerModal();
+        } catch (error) {
+            console.error('Failed to kick player:', error);
+        }
+    }
+
+    async banPlayer() {
+        try {
+            await this.apiCall(`/players/${this.currentPlayer}/action`, 'POST', {
+                action: 'ban',
+                params: { reason: '관리자에 의해 밴됨' }
+            });
+            this.showNotification(`${this.currentPlayer}를 밴했습니다`, 'success');
+            this.closePlayerModal();
+        } catch (error) {
+            console.error('Failed to ban player:', error);
+        }
+    }
+
+    async opPlayer() {
+        try {
+            await this.apiCall(`/players/${this.currentPlayer}/action`, 'POST', {
+                action: 'op'
+            });
+            this.showNotification(`${this.currentPlayer}에게 OP를 부여했습니다`, 'success');
+            this.closePlayerModal();
+        } catch (error) {
+            console.error('Failed to op player:', error);
+        }
+    }
+
+    async whitelistPlayer() {
+        try {
+            await this.apiCall(`/players/${this.currentPlayer}/action`, 'POST', {
+                action: 'whitelist_add'
+            });
+            this.showNotification(`${this.currentPlayer}를 화이트리스트에 추가했습니다`, 'success');
+            this.closePlayerModal();
+        } catch (error) {
+            console.error('Failed to whitelist player:', error);
+        }
+    }
+
+    async giveItem() {
+        const itemName = document.getElementById('itemName').value;
+        const itemAmount = parseInt(document.getElementById('itemAmount').value);
+
+        if (!itemName) return;
+
+        try {
+            await this.apiCall(`/players/${this.currentPlayer}/give`, 'POST', {
+                item: itemName,
+                amount: itemAmount
+            });
+            this.showNotification(`${this.currentPlayer}에게 ${itemName} x${itemAmount}을 지급했습니다`, 'success');
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemAmount').value = '1';
+        } catch (error) {
+            console.error('Failed to give item:', error);
+        }
+    }
+
+    // Worlds Management
+    async loadWorlds() {
+        try {
+            const worlds = await this.apiCall('/worlds');
+            this.displayWorlds(worlds);
+        } catch (error) {
+            console.error('Failed to load worlds:', error);
+        }
+    }
+
+    displayWorlds(worlds) {
+        const worldsList = document.getElementById('worldsList');
+
+        if (worlds.length === 0) {
+            worldsList.innerHTML = '<div class="empty-state"><p>월드가 없습니다</p></div>';
+            return;
+        }
+
+        worldsList.innerHTML = worlds.map(world => `
+            <div class="world-card">
+                <div class="world-header">
+                    <div class="world-name">${world.name}</div>
+                </div>
+                <div class="world-info">
+                    <div class="world-info-item">
+                        <span class="world-info-label">크기</span>
+                        <span class="world-info-value">${this.formatBytes(world.size)}</span>
+                    </div>
+                    <div class="world-info-item">
+                        <span class="world-info-label">마지막 수정</span>
+                        <span class="world-info-value">${new Date(world.last_modified).toLocaleString('ko-KR')}</span>
+                    </div>
+                    ${world.seed ? `
+                    <div class="world-info-item">
+                        <span class="world-info-label">시드</span>
+                        <span class="world-info-value">${world.seed}</span>
+                    </div>
+                    ` : ''}
+                </div>
+                <div class="world-actions">
+                    <button class="btn btn-danger btn-sm" onclick="app.deleteWorld('${world.name}')">삭제</button>
+                    <button class="btn btn-warning btn-sm" onclick="app.resetWorld('${world.name}')">리셋</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async deleteWorld(worldName) {
+        if (!confirm(`"${worldName}" 월드를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/worlds/${worldName}`, 'DELETE');
+            this.showNotification(`${worldName} 월드를 삭제했습니다`, 'success');
+            await this.loadWorlds();
+        } catch (error) {
+            console.error('Failed to delete world:', error);
+        }
+    }
+
+    async resetWorld(worldName) {
+        if (!confirm(`"${worldName}" 월드를 리셋하시겠습니까? 모든 데이터가 삭제됩니다.`)) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/worlds/${worldName}/reset`, 'POST');
+            this.showNotification(`${worldName} 월드를 리셋했습니다`, 'success');
+            await this.loadWorlds();
+        } catch (error) {
+            console.error('Failed to reset world:', error);
+        }
+    }
+
+    // Scheduled Tasks
+    async loadTasks() {
+        try {
+            const tasks = await this.apiCall('/tasks');
+            this.displayTasks(tasks);
+        } catch (error) {
+            console.error('Failed to load tasks:', error);
+        }
+    }
+
+    displayTasks(tasks) {
+        const tasksList = document.getElementById('tasksList');
+
+        if (tasks.length === 0) {
+            tasksList.innerHTML = '<div class="empty-state"><p>스케줄 작업이 없습니다</p></div>';
+            return;
+        }
+
+        tasksList.innerHTML = tasks.map(task => `
+            <div class="task-item">
+                <div class="task-info">
+                    <div class="task-name">
+                        ${task.name}
+                        <span class="task-badge ${task.enabled ? 'enabled' : 'disabled'}">
+                            ${task.enabled ? '활성' : '비활성'}
+                        </span>
+                    </div>
+                    <div class="task-meta">
+                        유형: ${task.task_type} • 스케줄: ${task.schedule}
+                        ${task.last_run ? ` • 마지막 실행: ${new Date(task.last_run).toLocaleString('ko-KR')}` : ''}
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button class="btn btn-danger btn-sm" onclick="app.deleteTask('${task.id}')">삭제</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    openTaskModal() {
+        document.getElementById('taskModal').style.display = 'flex';
+    }
+
+    closeTaskModal() {
+        document.getElementById('taskModal').style.display = 'none';
+        document.getElementById('taskName').value = '';
+        document.getElementById('taskSchedule').value = '';
+        document.getElementById('taskCommand').value = '';
+    }
+
+    async saveTask() {
+        const name = document.getElementById('taskName').value;
+        const taskType = document.getElementById('taskType').value;
+        const schedule = document.getElementById('taskSchedule').value;
+        const command = document.getElementById('taskCommand').value;
+
+        if (!name || !schedule) {
+            this.showNotification('작업 이름과 스케줄을 입력하세요', 'error');
+            return;
+        }
+
+        const task = {
+            id: '',
+            name: name,
+            task_type: taskType,
+            schedule: schedule,
+            enabled: true,
+            params: taskType === 'command' ? { command: command } : {}
+        };
+
+        try {
+            await this.apiCall('/tasks', 'POST', task);
+            this.showNotification('스케줄 작업이 생성되었습니다', 'success');
+            this.closeTaskModal();
+            await this.loadTasks();
+        } catch (error) {
+            console.error('Failed to create task:', error);
+        }
+    }
+
+    async deleteTask(taskId) {
+        if (!confirm('이 스케줄 작업을 삭제하시겠습니까?')) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/tasks/${taskId}`, 'DELETE');
+            this.showNotification('스케줄 작업이 삭제되었습니다', 'success');
+            await this.loadTasks();
+        } catch (error) {
+            console.error('Failed to delete task:', error);
+        }
+    }
+
+    // File Manager
+    async loadFiles(path = '') {
+        try {
+            const files = await this.apiCall(`/files?path=${encodeURIComponent(path)}`);
+            this.currentPath = path;
+            this.displayFiles(files);
+        } catch (error) {
+            console.error('Failed to load files:', error);
+        }
+    }
+
+    displayFiles(files) {
+        const filesList = document.getElementById('filesList');
+        const currentPath = document.getElementById('currentPath');
+
+        // Update breadcrumb
+        const pathParts = this.currentPath ? this.currentPath.split('/') : [];
+        currentPath.innerHTML = `
+            <span class="breadcrumb-item" onclick="app.loadFiles('')">📁 Home</span>
+            ${pathParts.map((part, i) => `
+                <span> / </span>
+                <span class="breadcrumb-item" onclick="app.loadFiles('${pathParts.slice(0, i + 1).join('/')}')">${part}</span>
+            `).join('')}
+        `;
+
+        if (files.length === 0) {
+            filesList.innerHTML = '<div class="empty-state"><p>파일이 없습니다</p></div>';
+            return;
+        }
+
+        filesList.innerHTML = files.map(file => `
+            <div class="file-item" onclick="app.${file.is_directory ? `loadFiles('${file.path}')` : `openFile('${file.path}')`}">
+                <div class="file-icon">
+                    <span>${file.is_directory ? '📁' : '📄'}</span>
+                    <span class="file-name ${file.is_directory ? 'directory' : ''}">${file.name}</span>
+                </div>
+                <div class="file-meta">
+                    ${!file.is_directory ? `<span>${this.formatBytes(file.size)}</span>` : ''}
+                    <span>${new Date(file.modified).toLocaleString('ko-KR')}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async openFile(path) {
+        try {
+            const content = await this.apiCall(`/files/read?path=${encodeURIComponent(path)}`);
+            this.currentFilePath = path;
+            document.getElementById('editorFileName').textContent = path;
+            document.getElementById('fileContent').value = content;
+            document.getElementById('fileEditorModal').style.display = 'flex';
+        } catch (error) {
+            console.error('Failed to open file:', error);
+            this.showNotification('파일을 열 수 없습니다', 'error');
+        }
+    }
+
+    closeFileEditor() {
+        document.getElementById('fileEditorModal').style.display = 'none';
+    }
+
+    async saveFile() {
+        const content = document.getElementById('fileContent').value;
+
+        try {
+            await this.apiCall('/files/write', 'POST', {
+                path: this.currentFilePath,
+                content: content
+            });
+            this.showNotification('파일이 저장되었습니다', 'success');
+            this.closeFileEditor();
+        } catch (error) {
+            console.error('Failed to save file:', error);
+        }
     }
 }
 

@@ -25,6 +25,10 @@
             <div class="nav-links">
                 <a href="#dashboard" class="nav-link active">대시보드</a>
                 <a href="#console" class="nav-link">콘솔</a>
+                <a href="#players" class="nav-link">플레이어</a>
+                <a href="#worlds" class="nav-link">월드</a>
+                <a href="#tasks" class="nav-link">스케줄</a>
+                <a href="#files" class="nav-link">파일</a>
                 <a href="#settings" class="nav-link">설정</a>
                 <a href="#backups" class="nav-link">백업</a>
             </div>
@@ -169,6 +173,146 @@
                 <div class="console-input">
                     <input type="text" id="commandInput" placeholder="명령어 입력..." disabled>
                     <button id="sendCommand" class="btn btn-primary" disabled>전송</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Players Section -->
+        <section id="players" class="section">
+            <div class="section-header">
+                <h2>플레이어 관리</h2>
+                <button id="refreshPlayersBtn" class="btn btn-primary">새로고침</button>
+            </div>
+
+            <div class="card">
+                <h3>온라인 플레이어</h3>
+                <div id="onlinePlayersList" class="players-list">
+                    <div class="empty-state">
+                        <p>온라인 플레이어가 없습니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>모든 플레이어</h3>
+                <div id="allPlayersList" class="players-list">
+                    <div class="empty-state">
+                        <p>플레이어 정보를 불러오는 중...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player Action Modal -->
+            <div id="playerModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>플레이어 관리: <span id="modalPlayerName"></span></h3>
+                    <div class="modal-actions">
+                        <button class="btn btn-warning" onclick="app.kickPlayer()">킥</button>
+                        <button class="btn btn-danger" onclick="app.banPlayer()">밴</button>
+                        <button class="btn btn-success" onclick="app.opPlayer()">OP 부여</button>
+                        <button class="btn btn-primary" onclick="app.whitelistPlayer()">화이트리스트 추가</button>
+                    </div>
+                    <div class="modal-form">
+                        <h4>아이템 지급</h4>
+                        <div class="form-row">
+                            <input type="text" id="itemName" placeholder="아이템 ID (예: minecraft:diamond)">
+                            <input type="number" id="itemAmount" placeholder="수량" value="1" min="1">
+                            <button class="btn btn-primary" onclick="app.giveItem()">지급</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="app.closePlayerModal()">닫기</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Worlds Section -->
+        <section id="worlds" class="section">
+            <div class="section-header">
+                <h2>월드 관리</h2>
+                <button id="refreshWorldsBtn" class="btn btn-primary">새로고침</button>
+            </div>
+
+            <div id="worldsList" class="worlds-grid">
+                <div class="empty-state">
+                    <p>월드 정보를 불러오는 중...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Scheduled Tasks Section -->
+        <section id="tasks" class="section">
+            <div class="section-header">
+                <h2>스케줄 작업</h2>
+                <button id="createTaskBtn" class="btn btn-success">새 작업 추가</button>
+            </div>
+
+            <div class="card">
+                <div id="tasksList" class="tasks-list">
+                    <div class="empty-state">
+                        <p>스케줄 작업이 없습니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Modal -->
+            <div id="taskModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>스케줄 작업 추가</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>작업 이름</label>
+                            <input type="text" id="taskName" placeholder="작업 이름">
+                        </div>
+                        <div class="form-group">
+                            <label>작업 유형</label>
+                            <select id="taskType">
+                                <option value="backup">백업</option>
+                                <option value="restart">재시작</option>
+                                <option value="command">명령어 실행</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>스케줄 (Cron 형식)</label>
+                            <input type="text" id="taskSchedule" placeholder="예: 0 */6 * * * (6시간마다)">
+                            <small>분 시 일 월 요일</small>
+                        </div>
+                        <div class="form-group full-width" id="taskCommandGroup" style="display: none;">
+                            <label>실행할 명령어</label>
+                            <input type="text" id="taskCommand" placeholder="명령어">
+                        </div>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn btn-primary" onclick="app.saveTask()">저장</button>
+                        <button class="btn btn-secondary" onclick="app.closeTaskModal()">취소</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- File Manager Section -->
+        <section id="files" class="section">
+            <div class="section-header">
+                <h2>파일 매니저</h2>
+                <div id="currentPath" class="breadcrumb"></div>
+            </div>
+
+            <div class="card">
+                <div id="filesList" class="files-list">
+                    <div class="empty-state">
+                        <p>파일 목록을 불러오는 중...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Editor Modal -->
+            <div id="fileEditorModal" class="modal" style="display: none;">
+                <div class="modal-content large">
+                    <h3>파일 편집: <span id="editorFileName"></span></h3>
+                    <textarea id="fileContent" rows="20"></textarea>
+                    <div class="modal-buttons">
+                        <button class="btn btn-primary" onclick="app.saveFile()">저장</button>
+                        <button class="btn btn-secondary" onclick="app.closeFileEditor()">취소</button>
+                    </div>
                 </div>
             </div>
         </section>

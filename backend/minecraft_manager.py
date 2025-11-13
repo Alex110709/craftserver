@@ -2,14 +2,21 @@ import asyncio
 import os
 import shutil
 import psutil
+import re
+import uuid as uuid_module
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, List, AsyncIterator
+from datetime import datetime, timedelta
+from typing import Optional, List, AsyncIterator, Dict, Any
 import subprocess
 import time
 import json
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
-from .models import ServerStatus, ServerConfig, BackupInfo
+from .models import (
+    ServerStatus, ServerConfig, BackupInfo, Player, PlayerInventory,
+    ItemStack, WorldInfo, ScheduledTask, FileEntry, PlayerAction
+)
 
 
 class MinecraftManager:
@@ -23,6 +30,9 @@ class MinecraftManager:
         self.start_time: Optional[float] = None
         self.config: ServerConfig = ServerConfig()
         self.log_file = self.logs_dir / "server.log"
+        self.players_cache: List[Player] = []
+        self.scheduler = AsyncIOScheduler()
+        self.scheduled_tasks: Dict[str, ScheduledTask] = {}
 
     async def initialize(self):
         """Initialize the manager"""
@@ -31,6 +41,10 @@ class MinecraftManager:
         self.backups_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
+        # Create subdirectories
+        (self.minecraft_dir / "world").mkdir(exist_ok=True)
+        (self.minecraft_dir / "plugins").mkdir(exist_ok=True)
+
         # Download server jar if not exists
         server_jar = self.minecraft_dir / "server.jar"
         if not server_jar.exists():
@@ -38,6 +52,10 @@ class MinecraftManager:
 
         # Create/load server properties
         self._load_config()
+
+        # Start scheduler
+        self.scheduler.start()
+        self._load_scheduled_tasks()
 
     async def _download_server_jar(self):
         """Download Minecraft server jar"""
@@ -303,3 +321,313 @@ class MinecraftManager:
         """Cleanup resources"""
         if self.is_running():
             await self.stop_server()
+        self.scheduler.shutdown()
+
+    # Player Management
+    async def get_players(self) -> List[Player]:
+        """Get list of all players"""
+        players = []
+
+        # Read from usercache.json
+        usercache_file = self.minecraft_dir / "usercache.json"
+        if usercache_file.exists():
+            try:
+                with open(usercache_file, 'r') as f:
+                    cache_data = json.load(f)
+                    for entry in cache_data:
+                        players.append(Player(
+                            uuid=entry.get('uuid', ''),
+                            name=entry.get('name', ''),
+                            online=False,
+                            last_seen=datetime.fromisoformat(entry.get('expiresOn', datetime.now().isoformat()).replace('Z', '+00:00'))
+                        ))
+            except:
+                pass
+
+        # Check online players
+        if self.is_running():
+            # Parse from server logs or send list command
+            # This is a simplified version
+            pass
+
+        return players
+
+    async def get_online_players(self) -> List[Player]:
+        """Get list of online players"""
+        if not self.is_running():
+            return []
+
+        # Send list command and parse output
+        # This would require parsing console output
+        return [p for p in self.players_cache if p.online]
+
+    async def player_action(self, player_name: str, action: PlayerAction, params: Optional[Dict[str, Any]] = None):
+        """Perform action on player"""
+        if not self.is_running():
+            raise Exception("Server must be running")
+
+        params = params or {}
+
+        commands = {
+            PlayerAction.KICK: f"kick {player_name} {params.get('reason', 'Kicked by admin')}",
+            PlayerAction.BAN: f"ban {player_name} {params.get('reason', 'Banned by admin')}",
+            PlayerAction.UNBAN: f"pardon {player_name}",
+            PlayerAction.OP: f"op {player_name}",
+            PlayerAction.DEOP: f"deop {player_name}",
+            PlayerAction.WHITELIST_ADD: f"whitelist add {player_name}",
+            PlayerAction.WHITELIST_REMOVE: f"whitelist remove {player_name}",
+            PlayerAction.TELEPORT: f"tp {player_name} {params.get('x', 0)} {params.get('y', 64)} {params.get('z', 0)}",
+            PlayerAction.GAMEMODE: f"gamemode {params.get('gamemode', 'survival')} {player_name}",
+        }
+
+        command = commands.get(action)
+        if command:
+            await self.send_command(command)
+
+    async def get_player_inventory(self, player_name: str) -> Optional[PlayerInventory]:
+        """Get player inventory (requires plugin/mod support)"""
+        # This would require a plugin like Essentials or custom plugin
+        # For demonstration, return mock data
+        inventory_file = self.minecraft_dir / "world" / "playerdata" / f"{player_name}.dat"
+
+        if not inventory_file.exists():
+            return None
+
+        # In production, you'd parse NBT data here
+        # For now, return empty inventory
+        return PlayerInventory(
+            player_name=player_name,
+            items=[]
+        )
+
+    async def give_item(self, player_name: str, item: str, amount: int = 1):
+        """Give item to player"""
+        if not self.is_running():
+            raise Exception("Server must be running")
+
+        await self.send_command(f"give {player_name} {item} {amount}")
+
+    async def clear_inventory(self, player_name: str):
+        """Clear player inventory"""
+        if not self.is_running():
+            raise Exception("Server must be running")
+
+        await self.send_command(f"clear {player_name}")
+
+    # World Management
+    async def get_worlds(self) -> List[WorldInfo]:
+        """Get list of worlds"""
+        worlds = []
+
+        world_dirs = ['world', 'world_nether', 'world_the_end']
+
+        for world_name in world_dirs:
+            world_path = self.minecraft_dir / world_name
+            if world_path.exists():
+                size = sum(f.stat().st_size for f in world_path.rglob('*') if f.is_file())
+                stat = world_path.stat()
+
+                # Read level.dat for seed
+                seed = None
+                level_dat = world_path / "level.dat"
+                if level_dat.exists():
+                    # Would need NBT parser for actual seed
+                    seed = "Unknown"
+
+                worlds.append(WorldInfo(
+                    name=world_name,
+                    size=size,
+                    last_modified=datetime.fromtimestamp(stat.st_mtime),
+                    seed=seed
+                ))
+
+        return worlds
+
+    async def delete_world(self, world_name: str):
+        """Delete a world"""
+        if self.is_running():
+            raise Exception("Server must be stopped to delete worlds")
+
+        world_path = self.minecraft_dir / world_name
+        if world_path.exists():
+            shutil.rmtree(world_path)
+
+    async def reset_world(self, world_name: str):
+        """Reset a world (delete and regenerate on next start)"""
+        await self.delete_world(world_name)
+
+    # Scheduled Tasks
+    def _load_scheduled_tasks(self):
+        """Load scheduled tasks from file"""
+        tasks_file = self.logs_dir / "scheduled_tasks.json"
+        if tasks_file.exists():
+            try:
+                with open(tasks_file, 'r') as f:
+                    tasks_data = json.load(f)
+                    for task_data in tasks_data:
+                        task = ScheduledTask(**task_data)
+                        self.scheduled_tasks[task.id] = task
+                        if task.enabled:
+                            self._schedule_task(task)
+            except Exception as e:
+                print(f"Error loading scheduled tasks: {e}")
+
+    def _save_scheduled_tasks(self):
+        """Save scheduled tasks to file"""
+        tasks_file = self.logs_dir / "scheduled_tasks.json"
+        tasks_data = [task.dict() for task in self.scheduled_tasks.values()]
+        with open(tasks_file, 'w') as f:
+            json.dump(tasks_data, f, indent=2, default=str)
+
+    def _schedule_task(self, task: ScheduledTask):
+        """Schedule a task"""
+        trigger = CronTrigger.from_crontab(task.schedule)
+
+        async def task_wrapper():
+            await self._execute_scheduled_task(task)
+
+        self.scheduler.add_job(
+            task_wrapper,
+            trigger=trigger,
+            id=task.id,
+            name=task.name,
+            replace_existing=True
+        )
+
+    async def _execute_scheduled_task(self, task: ScheduledTask):
+        """Execute a scheduled task"""
+        task.last_run = datetime.now()
+
+        try:
+            if task.task_type == "backup":
+                await self.create_backup()
+            elif task.task_type == "restart":
+                await self.restart_server()
+            elif task.task_type == "command":
+                command = task.params.get('command', '')
+                if command:
+                    await self.send_command(command)
+        except Exception as e:
+            print(f"Error executing scheduled task {task.name}: {e}")
+
+        self._save_scheduled_tasks()
+
+    async def create_scheduled_task(self, task: ScheduledTask) -> ScheduledTask:
+        """Create a new scheduled task"""
+        if not task.id:
+            task.id = str(uuid_module.uuid4())
+
+        self.scheduled_tasks[task.id] = task
+
+        if task.enabled:
+            self._schedule_task(task)
+
+        self._save_scheduled_tasks()
+        return task
+
+    async def update_scheduled_task(self, task_id: str, task: ScheduledTask):
+        """Update a scheduled task"""
+        if task_id not in self.scheduled_tasks:
+            raise Exception("Task not found")
+
+        # Remove old job
+        try:
+            self.scheduler.remove_job(task_id)
+        except:
+            pass
+
+        # Update task
+        task.id = task_id
+        self.scheduled_tasks[task_id] = task
+
+        # Reschedule if enabled
+        if task.enabled:
+            self._schedule_task(task)
+
+        self._save_scheduled_tasks()
+
+    async def delete_scheduled_task(self, task_id: str):
+        """Delete a scheduled task"""
+        if task_id not in self.scheduled_tasks:
+            raise Exception("Task not found")
+
+        # Remove job
+        try:
+            self.scheduler.remove_job(task_id)
+        except:
+            pass
+
+        # Remove from dict
+        del self.scheduled_tasks[task_id]
+        self._save_scheduled_tasks()
+
+    async def get_scheduled_tasks(self) -> List[ScheduledTask]:
+        """Get all scheduled tasks"""
+        return list(self.scheduled_tasks.values())
+
+    # File Manager
+    async def list_files(self, path: str = "") -> List[FileEntry]:
+        """List files in a directory"""
+        target_path = self.minecraft_dir / path
+
+        if not target_path.exists() or not target_path.is_dir():
+            raise Exception("Invalid directory")
+
+        # Security check - don't allow going outside minecraft dir
+        if not str(target_path.resolve()).startswith(str(self.minecraft_dir.resolve())):
+            raise Exception("Access denied")
+
+        entries = []
+        for item in target_path.iterdir():
+            stat = item.stat()
+            entries.append(FileEntry(
+                name=item.name,
+                path=str(item.relative_to(self.minecraft_dir)),
+                is_directory=item.is_dir(),
+                size=stat.st_size if item.is_file() else 0,
+                modified=datetime.fromtimestamp(stat.st_mtime)
+            ))
+
+        return sorted(entries, key=lambda x: (not x.is_directory, x.name))
+
+    async def read_file(self, path: str) -> str:
+        """Read file content"""
+        target_path = self.minecraft_dir / path
+
+        # Security check
+        if not str(target_path.resolve()).startswith(str(self.minecraft_dir.resolve())):
+            raise Exception("Access denied")
+
+        if not target_path.exists() or not target_path.is_file():
+            raise Exception("File not found")
+
+        # Limit file size
+        if target_path.stat().st_size > 1024 * 1024:  # 1MB
+            raise Exception("File too large")
+
+        with open(target_path, 'r') as f:
+            return f.read()
+
+    async def write_file(self, path: str, content: str):
+        """Write file content"""
+        target_path = self.minecraft_dir / path
+
+        # Security check
+        if not str(target_path.resolve()).startswith(str(self.minecraft_dir.resolve())):
+            raise Exception("Access denied")
+
+        with open(target_path, 'w') as f:
+            f.write(content)
+
+    async def delete_file(self, path: str):
+        """Delete a file"""
+        target_path = self.minecraft_dir / path
+
+        # Security check
+        if not str(target_path.resolve()).startswith(str(self.minecraft_dir.resolve())):
+            raise Exception("Access denied")
+
+        if target_path.is_file():
+            target_path.unlink()
+        elif target_path.is_dir():
+            shutil.rmtree(target_path)
