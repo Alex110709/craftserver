@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CraftServer - Minecraft Server Manager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#1BD96A"/>
+                    <path d="M16 8L8 12V20L16 24L24 20V12L16 8Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M16 16V24" stroke="white" stroke-width="2"/>
+                    <path d="M8 12L16 16L24 12" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+                </svg>
+                <h1>CraftServer</h1>
+            </div>
+            <div class="nav-links">
+                <a href="#dashboard" class="nav-link active">대시보드</a>
+                <a href="#console" class="nav-link">콘솔</a>
+                <a href="#settings" class="nav-link">설정</a>
+                <a href="#backups" class="nav-link">백업</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+            <div class="section-header">
+                <h2>서버 대시보드</h2>
+                <div class="server-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">서버 오프라인</span>
+                </div>
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="card control-card">
+                <div class="control-buttons">
+                    <button id="startBtn" class="btn btn-success">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6 4L16 10L6 16V4Z"/>
+                        </svg>
+                        시작
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <rect x="5" y="5" width="10" height="10"/>
+                        </svg>
+                        중지
+                    </button>
+                    <button id="restartBtn" class="btn btn-warning" disabled>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M4 10C4 6.68629 6.68629 4 10 4C13.3137 4 16 6.68629 16 10C16 13.3137 13.3137 16 10 16C8.34315 16 6.84315 15.3137 5.75736 14.2426"/>
+                            <path d="M4 14V10H8"/>
+                        </svg>
+                        재시작
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">플레이어</div>
+                        <div class="stat-value"><span id="playerCount">0</span> / <span id="maxPlayers">20</span></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">가동 시간</div>
+                        <div class="stat-value" id="uptime">0분</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">메모리</div>
+                        <div class="stat-value" id="memory">0 MB</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            <rect x="9" y="9" width="6" height="6"/>
+                            <line x1="9" y1="1" x2="9" y2="4"/>
+                            <line x1="15" y1="1" x2="15" y2="4"/>
+                            <line x1="9" y1="20" x2="9" y2="23"/>
+                            <line x1="15" y1="20" x2="15" y2="23"/>
+                            <line x1="20" y1="9" x2="23" y2="9"/>
+                            <line x1="20" y1="14" x2="23" y2="14"/>
+                            <line x1="1" y1="9" x2="4" y2="9"/>
+                            <line x1="1" y1="14" x2="4" y2="14"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">CPU</div>
+                        <div class="stat-value" id="cpu">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Info -->
+            <div class="card">
+                <h3>서버 정보</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">버전:</span>
+                        <span class="info-value" id="version">1.20.1</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">포트:</span>
+                        <span class="info-value">25565</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">게임모드:</span>
+                        <span class="info-value" id="gamemode">Survival</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">난이도:</span>
+                        <span class="info-value" id="difficulty">Normal</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Console Section -->
+        <section id="console" class="section">
+            <div class="section-header">
+                <h2>서버 콘솔</h2>
+            </div>
+
+            <div class="card console-card">
+                <div class="console-output" id="consoleOutput">
+                    <div class="console-line">[INFO] 서버 콘솔에 연결 대기 중...</div>
+                </div>
+                <div class="console-input">
+                    <input type="text" id="commandInput" placeholder="명령어 입력..." disabled>
+                    <button id="sendCommand" class="btn btn-primary" disabled>전송</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings" class="section">
+            <div class="section-header">
+                <h2>서버 설정</h2>
+            </div>
+
+            <div class="card">
+                <form id="settingsForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="serverName">서버 이름</label>
+                            <input type="text" id="serverName" name="server_name" value="CraftServer">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="maxPlayers">최대 플레이어</label>
+                            <input type="number" id="maxPlayersInput" name="max_players" value="20" min="1" max="100">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="gamemode">게임모드</label>
+                            <select id="gamemodeInput" name="gamemode">
+                                <option value="survival">서바이벌</option>
+                                <option value="creative">크리에이티브</option>
+                                <option value="adventure">어드벤처</option>
+                                <option value="spectator">관전</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="difficulty">난이도</label>
+                            <select id="difficultyInput" name="difficulty">
+                                <option value="peaceful">평화로움</option>
+                                <option value="easy">쉬움</option>
+                                <option value="normal">보통</option>
+                                <option value="hard">어려움</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="motd">MOTD (서버 설명)</label>
+                            <input type="text" id="motd" name="motd" value="A Minecraft Server">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="viewDistance">시야 거리</label>
+                            <input type="number" id="viewDistance" name="view_distance" value="10" min="3" max="32">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="memory">메모리 할당</label>
+                            <select id="memory" name="memory">
+                                <option value="1G">1GB</option>
+                                <option value="2G" selected>2GB</option>
+                                <option value="4G">4GB</option>
+                                <option value="8G">8GB</option>
+                                <option value="16G">16GB</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="pvp" name="pvp" checked>
+                                <span>PvP 활성화</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="onlineMode" name="online_mode" checked>
+                                <span>온라인 모드</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">설정 저장</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Backups Section -->
+        <section id="backups" class="section">
+            <div class="section-header">
+                <h2>백업 관리</h2>
+                <button id="createBackupBtn" class="btn btn-success">새 백업 생성</button>
+            </div>
+
+            <div class="card">
+                <div id="backupsList" class="backups-list">
+                    <div class="empty-state">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <p>백업이 없습니다</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+.git
+.gitignore
+README.md
+.env
+*.pyc
+__pycache__
+.pytest_cache
+.coverage
+minecraft/
+backups/
+logs/
+venv/
+.venv/

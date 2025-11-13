@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  craftserver:
+    build: .
+    container_name: craftserver
+    ports:
+      - "8000:8000"    # Web UI and API
+      - "25565:25565"  # Minecraft server
+    volumes:
+      - ./minecraft:/app/minecraft
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    environment:
+      - MINECRAFT_VERSION=1.20.1
+      - SERVER_MEMORY=2G
+      - SERVER_PORT=25565
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
