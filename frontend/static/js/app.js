@@ -9,12 +9,37 @@ class CraftServerApp {
     }
 
     init() {
+        this.initTheme();
         this.setupNavigation();
         this.setupEventListeners();
         this.setupTabs();
         this.connectWebSocket();
         this.startStatusUpdates();
         this.loadInitialData();
+    }
+
+    // Theme Management
+    initTheme() {
+        // Load theme from localStorage or default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        this.setTheme(savedTheme);
+
+        // Add theme toggle event listener
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => this.toggleTheme());
+        }
+    }
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        this.currentTheme = theme;
+    }
+
+    toggleTheme() {
+        const newTheme = this.currentTheme === 'dark' ? 'light' : 'dark';
+        this.setTheme(newTheme);
     }
 
     // Navigation
@@ -1024,6 +1049,130 @@ class CraftServerApp {
             return (downloads / 1000).toFixed(1) + 'K';
         }
         return downloads.toString();
+    }
+
+    // Modpack Management
+    async searchModpacks() {
+        const query = document.getElementById('modpackSearch').value;
+        const loader = document.getElementById('modpackLoader').value;
+
+        if (!query) {
+            this.showNotification('검색어를 입력하세요', 'error');
+            return;
+        }
+
+        try {
+            let url = `/modrinth/search?query=${encodeURIComponent(query)}&project_type=modpack`;
+            if (loader) {
+                url += `&loader=${loader}`;
+            }
+
+            const modpacks = await this.apiCall(url);
+            this.displayModpackResults(modpacks);
+        } catch (error) {
+            console.error('Failed to search modpacks:', error);
+        }
+    }
+
+    displayModpackResults(modpacks) {
+        const modpackResults = document.getElementById('modpackResults');
+
+        if (modpacks.length === 0) {
+            modpackResults.innerHTML = '<div class="empty-state"><p>검색 결과가 없습니다</p></div>';
+            return;
+        }
+
+        modpackResults.innerHTML = modpacks.map(modpack => `
+            <div class="mod-card">
+                <div class="mod-header">
+                    <div class="mod-icon">
+                        ${modpack.icon_url ? `<img src="${modpack.icon_url}" alt="${modpack.title}">` : ''}
+                    </div>
+                    <div class="mod-title-section">
+                        <div class="mod-title">${modpack.title}</div>
+                        <div class="mod-author">by ${modpack.author}</div>
+                    </div>
+                </div>
+                <p class="mod-description">${modpack.description}</p>
+                <div class="mod-meta">
+                    <span class="mod-badge">모드팩</span>
+                    <span>📥 ${this.formatDownloads(modpack.downloads)}</span>
+                </div>
+                <div class="mod-actions">
+                    <button class="btn btn-success" onclick="app.showModpackModal('${modpack.id}', '${modpack.title.replace(/'/g, "\\'")}')">
+                        서버 생성
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async showModpackModal(modpackId, modpackName) {
+        this.currentModpack = { id: modpackId, name: modpackName };
+        document.getElementById('modpackName').textContent = modpackName;
+        document.getElementById('modpackServerName').value = modpackName + ' Server';
+        document.getElementById('modpackModal').style.display = 'flex';
+
+        // Load modpack versions
+        try {
+            const versions = await this.apiCall(`/modrinth/project/${modpackId}/versions`);
+            const versionSelect = document.getElementById('modpackVersion');
+
+            if (versions.length === 0) {
+                versionSelect.innerHTML = '<option value="">사용 가능한 버전이 없습니다</option>';
+                return;
+            }
+
+            versionSelect.innerHTML = versions.map(version => `
+                <option value="${version.id}">
+                    ${version.name} - ${version.game_versions.join(', ')} (${version.loaders.join(', ')})
+                </option>
+            `).join('');
+        } catch (error) {
+            console.error('Failed to load modpack versions:', error);
+        }
+    }
+
+    closeModpackModal() {
+        document.getElementById('modpackModal').style.display = 'none';
+    }
+
+    async createModpackServer() {
+        const versionId = document.getElementById('modpackVersion').value;
+        const serverName = document.getElementById('modpackServerName').value;
+        const memory = document.getElementById('modpackMemory').value;
+
+        if (!versionId) {
+            this.showNotification('버전을 선택하세요', 'error');
+            return;
+        }
+
+        if (!serverName) {
+            this.showNotification('서버 이름을 입력하세요', 'error');
+            return;
+        }
+
+        if (!confirm('현재 서버가 중지되고 새 모드팩 서버가 생성됩니다. 계속하시겠습니까?')) {
+            return;
+        }
+
+        try {
+            this.showNotification('모드팩 서버를 생성하는 중... 시간이 걸릴 수 있습니다.', 'info');
+            this.closeModpackModal();
+
+            const result = await this.apiCall('/modrinth/create-modpack-server', 'POST', {
+                version_id: versionId,
+                server_name: serverName,
+                memory: memory
+            });
+
+            this.showNotification('모드팩 서버가 성공적으로 생성되었습니다!', 'success');
+            await this.updateStatus();
+            await this.loadConfig();
+        } catch (error) {
+            console.error('Failed to create modpack server:', error);
+            this.showNotification('모드팩 서버 생성에 실패했습니다', 'error');
+        }
     }
 }
 

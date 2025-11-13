@@ -400,3 +400,24 @@ async def uninstall_mod(mod_type: str, filename: str):
             raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/modrinth/create-modpack-server")
+async def create_modpack_server(modpack_data: dict):
+    """Create a new server from a Modrinth modpack"""
+    try:
+        version_id = modpack_data.get("version_id")
+        server_name = modpack_data.get("server_name", "Modpack Server")
+        memory = modpack_data.get("memory", "4G")
+
+        if not version_id:
+            raise HTTPException(status_code=400, detail="version_id is required")
+
+        result = await mc_manager.create_modpack_server(version_id, server_name, memory)
+        return {
+            "status": "success",
+            "message": "Modpack server created successfully",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

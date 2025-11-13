@@ -804,3 +804,128 @@ class MinecraftManager:
             return True
 
         return False
+
+    async def create_modpack_server(
+        self,
+        version_id: str,
+        server_name: str,
+        memory: str
+    ) -> Dict[str, Any]:
+        """Create a new server from a Modrinth modpack"""
+        import zipfile
+        import tempfile
+
+        # Stop server if running
+        if self.is_running():
+            await self.stop_server()
+            await asyncio.sleep(3)
+
+        # Get modpack version details
+        version = await self.modrinth_client.get_version(version_id)
+
+        if not version.get("files"):
+            raise Exception("No files found for this modpack version")
+
+        # Get primary file (the modpack zip)
+        primary_file = None
+        for f in version["files"]:
+            if f.get("primary", False) or f["filename"].endswith(".mrpack"):
+                primary_file = f
+                break
+
+        if not primary_file:
+            primary_file = version["files"][0]
+
+        # Download modpack to temp location
+        temp_dir = Path(tempfile.mkdtemp())
+        modpack_path = temp_dir / primary_file["filename"]
+
+        print(f"Downloading modpack: {primary_file['filename']}")
+        success = await self.modrinth_client.download_file(
+            primary_file["url"],
+            modpack_path
+        )
+
+        if not success:
+            shutil.rmtree(temp_dir)
+            raise Exception("Failed to download modpack")
+
+        # Backup current server
+        if (self.minecraft_dir / "server.jar").exists():
+            backup_name = f"pre-modpack-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            backup_path = self.backups_dir / backup_name
+            print(f"Creating backup: {backup_name}")
+            shutil.copytree(self.minecraft_dir, backup_path, ignore=shutil.ignore_patterns('*.log'))
+
+        # Clear mods directory
+        mods_dir = self.minecraft_dir / "mods"
+        if mods_dir.exists():
+            shutil.rmtree(mods_dir)
+        mods_dir.mkdir(parents=True)
+
+        # Extract modpack
+        print("Extracting modpack...")
+        with zipfile.ZipFile(modpack_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir / "modpack")
+
+        modpack_extracted = temp_dir / "modpack"
+
+        # Read modpack manifest (modrinth.index.json for mrpack format)
+        manifest_path = modpack_extracted / "modrinth.index.json"
+        if manifest_path.exists():
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            # Install mods from manifest
+            print("Installing mods from modpack...")
+            if "files" in manifest:
+                for file_info in manifest["files"]:
+                    file_url = file_info.get("downloads", [None])[0]
+                    file_path = file_info.get("path", "")
+
+                    if file_url and file_path:
+                        dest_path = self.minecraft_dir / file_path
+                        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        print(f"Downloading: {file_path}")
+                        await self.modrinth_client.download_file(file_url, dest_path)
+
+            # Copy overrides (configs, scripts, etc.)
+            overrides_dir = modpack_extracted / "overrides"
+            if overrides_dir.exists():
+                print("Copying overrides...")
+                for item in overrides_dir.rglob("*"):
+                    if item.is_file():
+                        rel_path = item.relative_to(overrides_dir)
+                        dest_path = self.minecraft_dir / rel_path
+                        dest_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, dest_path)
+
+            # Update server config based on modpack
+            game_version = manifest.get("dependencies", {}).get("minecraft", "1.20.1")
+            loader = "forge"
+            if "fabric-loader" in manifest.get("dependencies", {}):
+                loader = "fabric"
+            elif "quilt-loader" in manifest.get("dependencies", {}):
+                loader = "quilt"
+
+            self.config.minecraft_version = game_version
+            self.config.server_name = server_name
+            self.config.memory = memory
+            self._save_config()
+
+            # Download appropriate server jar
+            # For now, we'll just note this - in production you'd download the correct loader
+            print(f"Modpack requires: {loader} for Minecraft {game_version}")
+            print("Note: You may need to manually install the correct server jar for this modpack")
+
+        # Cleanup
+        shutil.rmtree(temp_dir)
+
+        print("Modpack server created successfully!")
+        return {
+            "modpack": version.get("name", "Unknown"),
+            "version": version.get("version_number", "Unknown"),
+            "game_version": self.config.minecraft_version,
+            "mods_installed": len(list(mods_dir.glob("*.jar")))
+        }
