@@ -15,8 +15,10 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .models import (
     ServerStatus, ServerConfig, BackupInfo, Player, PlayerInventory,
-    ItemStack, WorldInfo, ScheduledTask, FileEntry, PlayerAction
+    ItemStack, WorldInfo, ScheduledTask, FileEntry, PlayerAction,
+    ModrinthProject, ModrinthVersion, InstalledMod
 )
+from .modrinth_client import ModrinthClient
 
 
 class MinecraftManager:
@@ -33,6 +35,7 @@ class MinecraftManager:
         self.players_cache: List[Player] = []
         self.scheduler = AsyncIOScheduler()
         self.scheduled_tasks: Dict[str, ScheduledTask] = {}
+        self.modrinth_client = ModrinthClient()
 
     async def initialize(self):
         """Initialize the manager"""
@@ -631,3 +634,173 @@ class MinecraftManager:
             target_path.unlink()
         elif target_path.is_dir():
             shutil.rmtree(target_path)
+
+    # Modrinth Integration
+    async def search_modrinth(
+        self,
+        query: str,
+        project_type: Optional[str] = None,
+        categories: Optional[List[str]] = None
+    ) -> List[ModrinthProject]:
+        """Search Modrinth for mods/plugins/datapacks"""
+        facets = []
+
+        if project_type:
+            facets.append([f"project_type:{project_type}"])
+
+        if categories:
+            facets.append([f"categories:{cat}" for cat in categories])
+
+        # Add game version filter
+        facets.append([f"versions:{self.config.minecraft_version}"])
+
+        result = await self.modrinth_client.search(query, facets=facets if facets else None)
+
+        projects = []
+        for hit in result.get("hits", []):
+            projects.append(ModrinthProject(
+                id=hit["project_id"],
+                slug=hit["slug"],
+                title=hit["title"],
+                description=hit["description"],
+                categories=hit.get("categories", []),
+                project_type=hit["project_type"],
+                downloads=hit["downloads"],
+                icon_url=hit.get("icon_url"),
+                author=hit.get("author", "Unknown"),
+                versions=hit.get("versions", [])
+            ))
+
+        return projects
+
+    async def get_project_versions(
+        self,
+        project_id: str,
+        loader: Optional[str] = None
+    ) -> List[ModrinthVersion]:
+        """Get available versions for a project"""
+        loaders = [loader] if loader else None
+        game_versions = [self.config.minecraft_version]
+
+        versions_data = await self.modrinth_client.get_project_versions(
+            project_id,
+            loaders=loaders,
+            game_versions=game_versions
+        )
+
+        versions = []
+        for v in versions_data:
+            versions.append(ModrinthVersion(
+                id=v["id"],
+                project_id=v["project_id"],
+                name=v["name"],
+                version_number=v["version_number"],
+                game_versions=v["game_versions"],
+                loaders=v["loaders"],
+                files=v["files"],
+                downloads=v["downloads"],
+                date_published=v["date_published"]
+            ))
+
+        return versions
+
+    async def install_from_modrinth(
+        self,
+        version_id: str,
+        install_type: str = "mods"  # mods, plugins, datapacks
+    ) -> InstalledMod:
+        """Install a mod/plugin/datapack from Modrinth"""
+        # Get version details
+        version = await self.modrinth_client.get_version(version_id)
+
+        if not version.get("files"):
+            raise Exception("No files found for this version")
+
+        # Get primary file
+        primary_file = None
+        for f in version["files"]:
+            if f.get("primary", False):
+                primary_file = f
+                break
+
+        if not primary_file:
+            primary_file = version["files"][0]
+
+        # Determine installation directory
+        install_dirs = {
+            "mods": self.minecraft_dir / "mods",
+            "plugins": self.minecraft_dir / "plugins",
+            "datapacks": self.minecraft_dir / "world" / "datapacks"
+        }
+
+        install_dir = install_dirs.get(install_type, self.minecraft_dir / "mods")
+        install_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download file
+        filename = primary_file["filename"]
+        dest_path = install_dir / filename
+
+        success = await self.modrinth_client.download_file(
+            primary_file["url"],
+            dest_path
+        )
+
+        if not success:
+            raise Exception("Failed to download file")
+
+        # Create installed mod record
+        installed = InstalledMod(
+            filename=filename,
+            project_id=version.get("project_id"),
+            version_id=version["id"],
+            name=version.get("name", filename),
+            type=install_type,
+            size=primary_file.get("size", 0),
+            installed_date=datetime.now()
+        )
+
+        return installed
+
+    async def list_installed_mods(self, mod_type: str = "mods") -> List[InstalledMod]:
+        """List installed mods/plugins/datapacks"""
+        install_dirs = {
+            "mods": self.minecraft_dir / "mods",
+            "plugins": self.minecraft_dir / "plugins",
+            "datapacks": self.minecraft_dir / "world" / "datapacks"
+        }
+
+        install_dir = install_dirs.get(mod_type, self.minecraft_dir / "mods")
+
+        if not install_dir.exists():
+            return []
+
+        installed = []
+        for file_path in install_dir.glob("*.jar"):
+            if file_path.is_file():
+                stat = file_path.stat()
+                installed.append(InstalledMod(
+                    filename=file_path.name,
+                    name=file_path.stem,
+                    type=mod_type,
+                    size=stat.st_size,
+                    installed_date=datetime.fromtimestamp(stat.st_mtime)
+                ))
+
+        return installed
+
+    async def uninstall_mod(self, filename: str, mod_type: str = "mods") -> bool:
+        """Uninstall a mod/plugin/datapack"""
+        install_dirs = {
+            "mods": self.minecraft_dir / "mods",
+            "plugins": self.minecraft_dir / "plugins",
+            "datapacks": self.minecraft_dir / "world" / "datapacks"
+        }
+
+        install_dir = install_dirs.get(mod_type, self.minecraft_dir / "mods")
+        file_path = install_dir / filename
+
+        if file_path.exists():
+            file_path.unlink()
+            return True
+
+        return False

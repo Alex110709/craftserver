@@ -27,6 +27,7 @@
                 <a href="#console" class="nav-link">콘솔</a>
                 <a href="#players" class="nav-link">플레이어</a>
                 <a href="#worlds" class="nav-link">월드</a>
+                <a href="#modrinth" class="nav-link">모드/플러그인</a>
                 <a href="#tasks" class="nav-link">스케줄</a>
                 <a href="#files" class="nav-link">파일</a>
                 <a href="#settings" class="nav-link">설정</a>
@@ -235,6 +236,81 @@
             <div id="worldsList" class="worlds-grid">
                 <div class="empty-state">
                     <p>월드 정보를 불러오는 중...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modrinth Section -->
+        <section id="modrinth" class="section">
+            <div class="section-header">
+                <h2>모드/플러그인 관리</h2>
+            </div>
+
+            <!-- Tabs for different types -->
+            <div class="tabs">
+                <button class="tab active" data-tab="search">검색</button>
+                <button class="tab" data-tab="installed-mods">설치된 모드</button>
+                <button class="tab" data-tab="installed-plugins">설치된 플러그인</button>
+                <button class="tab" data-tab="installed-datapacks">설치된 데이터팩</button>
+            </div>
+
+            <!-- Search Tab -->
+            <div class="tab-content active" id="search-tab">
+                <div class="card">
+                    <div class="search-bar">
+                        <input type="text" id="modrinthSearch" placeholder="Modrinth에서 검색...">
+                        <select id="projectType">
+                            <option value="">모든 타입</option>
+                            <option value="mod">모드</option>
+                            <option value="plugin">플러그인</option>
+                            <option value="datapack">데이터팩</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="app.searchModrinth()">검색</button>
+                    </div>
+                </div>
+
+                <div id="searchResults" class="mods-grid">
+                    <div class="empty-state">
+                        <p>모드, 플러그인 또는 데이터팩을 검색하세요</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Installed Mods Tab -->
+            <div class="tab-content" id="installed-mods-tab">
+                <div id="installedModsList" class="mods-list">
+                    <div class="empty-state">
+                        <p>설치된 모드가 없습니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Installed Plugins Tab -->
+            <div class="tab-content" id="installed-plugins-tab">
+                <div id="installedPluginsList" class="mods-list">
+                    <div class="empty-state">
+                        <p>설치된 플러그인이 없습니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Installed Datapacks Tab -->
+            <div class="tab-content" id="installed-datapacks-tab">
+                <div id="installedDatapacksList" class="mods-list">
+                    <div class="empty-state">
+                        <p>설치된 데이터팩이 없습니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Install Modal -->
+            <div id="installModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>설치: <span id="installProjectName"></span></h3>
+                    <div id="versionsList" class="versions-list">
+                        <p>버전을 불러오는 중...</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="app.closeInstallModal()">취소</button>
                 </div>
             </div>
         </section>

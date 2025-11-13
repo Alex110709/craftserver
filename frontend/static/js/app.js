@@ -11,6 +11,7 @@ class CraftServerApp {
     init() {
         this.setupNavigation();
         this.setupEventListeners();
+        this.setupTabs();
         this.connectWebSocket();
         this.startStatusUpdates();
         this.loadInitialData();
@@ -45,6 +46,8 @@ class CraftServerApp {
                     this.loadTasks();
                 } else if (targetId === 'files') {
                     this.loadFiles();
+                } else if (targetId === 'modrinth') {
+                    // Modrinth section loaded
                 }
             });
         });
@@ -87,6 +90,35 @@ class CraftServerApp {
                 commandGroup.style.display = e.target.value === 'command' ? 'block' : 'none';
             });
         }
+    }
+
+    // Setup Tabs
+    setupTabs() {
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+
+                // Update active tab
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update active content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+
+                // Load data for tab
+                if (tabName === 'installed-mods') {
+                    this.loadInstalledMods('mods');
+                } else if (tabName === 'installed-plugins') {
+                    this.loadInstalledMods('plugins');
+                } else if (tabName === 'installed-datapacks') {
+                    this.loadInstalledMods('datapacks');
+                }
+            });
+        });
     }
 
     // WebSocket Connection
@@ -815,6 +847,183 @@ class CraftServerApp {
         } catch (error) {
             console.error('Failed to save file:', error);
         }
+    }
+
+    // Modrinth Integration
+    async searchModrinth() {
+        const query = document.getElementById('modrinthSearch').value;
+        const projectType = document.getElementById('projectType').value;
+
+        if (!query) {
+            this.showNotification('검색어를 입력하세요', 'error');
+            return;
+        }
+
+        try {
+            const projects = await this.apiCall(
+                `/modrinth/search?query=${encodeURIComponent(query)}${projectType ? `&project_type=${projectType}` : ''}`
+            );
+            this.displaySearchResults(projects);
+        } catch (error) {
+            console.error('Failed to search Modrinth:', error);
+        }
+    }
+
+    displaySearchResults(projects) {
+        const searchResults = document.getElementById('searchResults');
+
+        if (projects.length === 0) {
+            searchResults.innerHTML = '<div class="empty-state"><p>검색 결과가 없습니다</p></div>';
+            return;
+        }
+
+        searchResults.innerHTML = projects.map(project => `
+            <div class="mod-card">
+                <div class="mod-header">
+                    <div class="mod-icon">
+                        ${project.icon_url ? `<img src="${project.icon_url}" alt="${project.title}">` : ''}
+                    </div>
+                    <div class="mod-title-section">
+                        <div class="mod-title">${project.title}</div>
+                        <div class="mod-author">by ${project.author}</div>
+                    </div>
+                </div>
+                <p class="mod-description">${project.description}</p>
+                <div class="mod-meta">
+                    <span class="mod-badge">${project.project_type}</span>
+                    <span>📥 ${this.formatDownloads(project.downloads)}</span>
+                </div>
+                <div class="mod-actions">
+                    <button class="btn btn-success" onclick="app.showInstallModal('${project.id}', '${project.title}', '${project.project_type}')">
+                        설치
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async showInstallModal(projectId, projectName, projectType) {
+        this.currentInstallProject = { id: projectId, name: projectName, type: projectType };
+        document.getElementById('installProjectName').textContent = projectName;
+        document.getElementById('installModal').style.display = 'flex';
+
+        // Load versions
+        try {
+            const versions = await this.apiCall(`/modrinth/project/${projectId}/versions`);
+            this.displayVersions(versions);
+        } catch (error) {
+            console.error('Failed to load versions:', error);
+        }
+    }
+
+    displayVersions(versions) {
+        const versionsList = document.getElementById('versionsList');
+
+        if (versions.length === 0) {
+            versionsList.innerHTML = '<p>사용 가능한 버전이 없습니다</p>';
+            return;
+        }
+
+        versionsList.innerHTML = versions.map(version => `
+            <div class="version-item">
+                <div class="version-info">
+                    <div class="version-name">${version.name}</div>
+                    <div class="version-meta">
+                        버전: ${version.version_number} •
+                        로더: ${version.loaders.join(', ')} •
+                        게임 버전: ${version.game_versions.join(', ')}
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="app.installVersion('${version.id}')">
+                    설치
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async installVersion(versionId) {
+        try {
+            const installType = this.currentInstallProject.type === 'mod' ? 'mods' :
+                              this.currentInstallProject.type === 'plugin' ? 'plugins' :
+                              'datapacks';
+
+            await this.apiCall('/modrinth/install', 'POST', {
+                version_id: versionId,
+                type: installType
+            });
+
+            this.showNotification(`${this.currentInstallProject.name}이(가) 설치되었습니다`, 'success');
+            this.closeInstallModal();
+        } catch (error) {
+            console.error('Failed to install:', error);
+        }
+    }
+
+    closeInstallModal() {
+        document.getElementById('installModal').style.display = 'none';
+    }
+
+    async loadInstalledMods(modType) {
+        try {
+            const mods = await this.apiCall(`/modrinth/installed/${modType}`);
+            this.displayInstalledMods(mods, modType);
+        } catch (error) {
+            console.error('Failed to load installed mods:', error);
+        }
+    }
+
+    displayInstalledMods(mods, modType) {
+        const listId = modType === 'mods' ? 'installedModsList' :
+                      modType === 'plugins' ? 'installedPluginsList' :
+                      'installedDatapacksList';
+
+        const list = document.getElementById(listId);
+
+        if (mods.length === 0) {
+            const typeName = modType === 'mods' ? '모드' :
+                           modType === 'plugins' ? '플러그인' :
+                           '데이터팩';
+            list.innerHTML = `<div class="empty-state"><p>설치된 ${typeName}가 없습니다</p></div>`;
+            return;
+        }
+
+        list.innerHTML = mods.map(mod => `
+            <div class="installed-mod-item">
+                <div class="installed-mod-info">
+                    <div class="installed-mod-name">${mod.name}</div>
+                    <div class="installed-mod-meta">
+                        ${this.formatBytes(mod.size)} •
+                        설치: ${new Date(mod.installed_date).toLocaleString('ko-KR')}
+                    </div>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="app.uninstallMod('${mod.filename}', '${modType}')">
+                    제거
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async uninstallMod(filename, modType) {
+        if (!confirm(`${filename}을(를) 제거하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/modrinth/installed/${modType}/${filename}`, 'DELETE');
+            this.showNotification(`${filename}이(가) 제거되었습니다`, 'success');
+            await this.loadInstalledMods(modType);
+        } catch (error) {
+            console.error('Failed to uninstall mod:', error);
+        }
+    }
+
+    formatDownloads(downloads) {
+        if (downloads >= 1000000) {
+            return (downloads / 1000000).toFixed(1) + 'M';
+        } else if (downloads >= 1000) {
+            return (downloads / 1000).toFixed(1) + 'K';
+        }
+        return downloads.toString();
     }
 }
 

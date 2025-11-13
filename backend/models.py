@@ -110,3 +110,41 @@ class FileEntry(BaseModel):
     size: int
     modified: datetime
     permissions: Optional[str] = None
+
+
+class ModrinthProject(BaseModel):
+    """Modrinth project model"""
+    id: str
+    slug: str
+    title: str
+    description: str
+    categories: List[str]
+    project_type: str  # mod, plugin, datapack
+    downloads: int
+    icon_url: Optional[str] = None
+    author: str
+    versions: Optional[List[str]] = None
+
+
+class ModrinthVersion(BaseModel):
+    """Modrinth version model"""
+    id: str
+    project_id: str
+    name: str
+    version_number: str
+    game_versions: List[str]
+    loaders: List[str]
+    files: List[Dict[str, Any]]
+    downloads: int
+    date_published: str
+
+
+class InstalledMod(BaseModel):
+    """Installed mod/plugin/datapack model"""
+    filename: str
+    project_id: Optional[str] = None
+    version_id: Optional[str] = None
+    name: str
+    type: str  # mod, plugin, datapack
+    size: int
+    installed_date: datetime

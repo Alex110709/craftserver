@@ -11,7 +11,8 @@ from pathlib import Path
 from .minecraft_manager import MinecraftManager
 from .models import (
     ServerStatus, ServerConfig, BackupInfo, Player, PlayerInventory,
-    WorldInfo, ScheduledTask, FileEntry, PlayerAction
+    WorldInfo, ScheduledTask, FileEntry, PlayerAction, ModrinthProject,
+    ModrinthVersion, InstalledMod
 )
 
 app = FastAPI(title="CraftServer Manager", version="1.0.0")
@@ -333,5 +334,69 @@ async def delete_file(path: str):
     try:
         await mc_manager.delete_file(path)
         return {"status": "success", "message": "File deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Modrinth Endpoints
+@app.get("/api/modrinth/search")
+async def search_modrinth(
+    query: str,
+    project_type: Optional[str] = None
+) -> List[ModrinthProject]:
+    """Search Modrinth for mods/plugins/datapacks"""
+    try:
+        return await mc_manager.search_modrinth(query, project_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/modrinth/project/{project_id}/versions")
+async def get_project_versions(
+    project_id: str,
+    loader: Optional[str] = None
+) -> List[ModrinthVersion]:
+    """Get versions for a Modrinth project"""
+    try:
+        return await mc_manager.get_project_versions(project_id, loader)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/modrinth/install")
+async def install_from_modrinth(install_data: dict):
+    """Install a mod/plugin/datapack from Modrinth"""
+    try:
+        version_id = install_data.get("version_id")
+        install_type = install_data.get("type", "mods")
+
+        installed = await mc_manager.install_from_modrinth(version_id, install_type)
+        return {
+            "status": "success",
+            "message": f"Installed {installed.name}",
+            "installed": installed
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/modrinth/installed/{mod_type}")
+async def list_installed_mods(mod_type: str) -> List[InstalledMod]:
+    """List installed mods/plugins/datapacks"""
+    try:
+        return await mc_manager.list_installed_mods(mod_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/modrinth/installed/{mod_type}/{filename}")
+async def uninstall_mod(mod_type: str, filename: str):
+    """Uninstall a mod/plugin/datapack"""
+    try:
+        success = await mc_manager.uninstall_mod(filename, mod_type)
+        if success:
+            return {"status": "success", "message": f"Uninstalled {filename}"}
+        else:
+            raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
