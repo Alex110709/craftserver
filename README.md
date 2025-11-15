@@ -41,21 +41,43 @@ Crafty Controller와 유사한 Docker 기반 마인크래프트 서버 관리 �
 - **WebSocket API**: 실시간 통신
 
 ### Infrastructure
-- **Docker**: 컨테이너화
+- **Docker**: 컨테이너화 (멀티 아키텍처 지원: AMD64, ARM64)
 - **Docker Compose**: 간편한 배포
-- **Java 17**: 마인크래프트 서버 실행
+- **Java 21**: 마인크래프트 서버 실행
 
 ## 설치 및 실행
 
 ### 필요 사항
 - Docker
-- Docker Compose
+- Docker Compose (선택사항)
 
 ### 빠른 시작
 
+#### Docker Hub에서 실행 (권장)
+
+```bash
+# Docker Hub에서 이미지 가져오기
+docker pull yuchanshin/craftserver:latest
+
+# 컨테이너 실행
+docker run -d \
+  --name craftserver \
+  -p 8000:8000 \
+  -p 25565:25565 \
+  -v $(pwd)/minecraft:/app/minecraft \
+  -v $(pwd)/backups:/app/backups \
+  -v $(pwd)/logs:/app/logs \
+  -e MINECRAFT_VERSION=1.20.1 \
+  -e SERVER_MEMORY=2G \
+  -e SERVER_PORT=25565 \
+  yuchanshin/craftserver:latest
+```
+
+#### Docker Compose로 실행
+
 1. **저장소 클론**
 ```bash
-git clone <repository-url>
+git clone https://github.com/yuchanshin/craftserver.git
 cd craftserver
 ```
 
@@ -64,9 +86,33 @@ cd craftserver
 docker-compose up -d
 ```
 
-3. **웹 인터페이스 접속**
+#### 소스코드에서 빌드
+
+```bash
+git clone https://github.com/yuchanshin/craftserver.git
+cd craftserver
+docker build -t craftserver .
+docker run -d -p 8000:8000 -p 25565:25565 craftserver
+```
+
+### 웹 인터페이스 접속
 - 웹 UI: http://localhost:8000
 - 마인크래프트 서버: localhost:25565
+
+## Docker Hub
+
+이 프로젝트는 Docker Hub에 게시되어 있습니다:
+- **이미지**: `yuchanshin/craftserver`
+- **태그**: `latest`, `1.0.0`
+- **지원 아키텍처**: AMD64, ARM64
+
+```bash
+# 최신 버전
+docker pull yuchanshin/craftserver:latest
+
+# 특정 버전
+docker pull yuchanshin/craftserver:1.0.0
+```
 
 ### 환경 변수
 
@@ -162,11 +208,14 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 빌드
+### Docker 빌드
 
 ```bash
-# Docker 이미지 빌드
+# 로컬 아키텍처용 빌드
 docker build -t craftserver .
+
+# 멀티 아키텍처 빌드 (AMD64, ARM64)
+docker buildx build --platform linux/amd64,linux/arm64 -t craftserver .
 
 # 컨테이너 실행
 docker run -d -p 8000:8000 -p 25565:25565 craftserver

@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Install Java for Minecraft server
+# Install Java for Minecraft server and build tools
 RUN apt-get update && \
-    apt-get install -y openjdk-17-jre-headless wget curl && \
+    apt-get install -y openjdk-21-jre-headless wget curl gcc python3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
