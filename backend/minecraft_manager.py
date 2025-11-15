@@ -22,6 +22,7 @@ from .modrinth_client import ModrinthClient
 from .curseforge_client import CurseForgeClient
 from .spigot_client import SpigotClient
 from .profiler import PerformanceProfiler
+from .java_manager import JavaManager
 
 
 class MinecraftManager:
@@ -47,6 +48,7 @@ class MinecraftManager:
         self.curseforge_client = CurseForgeClient()
         self.spigot_client = SpigotClient()
         self.profiler = PerformanceProfiler()
+        self.java_manager = JavaManager()
 
     async def initialize(self):
         """Initialize the manager"""

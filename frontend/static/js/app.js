@@ -78,6 +78,8 @@ class CraftServerApp {
                     // Modrinth section loaded
                 } else if (targetId === 'performance') {
                     this.initPerformanceMonitoring();
+                } else if (targetId === 'settings') {
+                    this.loadJavaInfo();
                 }
             });
         });
@@ -143,6 +145,17 @@ class CraftServerApp {
                 const commandGroup = document.getElementById('taskCommandGroup');
                 commandGroup.style.display = e.target.value === 'command' ? 'block' : 'none';
             });
+        }
+
+        // Java management buttons
+        const autoInstallJavaBtn = document.getElementById('autoInstallJavaBtn');
+        if (autoInstallJavaBtn) {
+            autoInstallJavaBtn.addEventListener('click', () => this.autoInstallJava());
+        }
+
+        const refreshJavaBtn = document.getElementById('refreshJavaBtn');
+        if (refreshJavaBtn) {
+            refreshJavaBtn.addEventListener('click', () => this.loadJavaInfo());
         }
     }
 
@@ -1735,6 +1748,121 @@ class CraftServerApp {
         } catch (error) {
             console.error('Failed to create server:', error);
             this.showNotification('서버 생성에 실패했습니다', 'error');
+        }
+    }
+
+    // Java Management
+    async loadJavaInfo() {
+        try {
+            const config = await this.apiCall('/config');
+            const minecraftVersion = config.minecraft_version || '1.20.1';
+
+            // Get Java info
+            const javaInfo = await this.apiCall('/java/info');
+            const requiredInfo = await this.apiCall(`/java/required/${minecraftVersion}`);
+
+            // Display status
+            const statusContainer = document.getElementById('javaStatus');
+            const isInstalled = requiredInfo.is_installed;
+
+            statusContainer.innerHTML = `
+                <div class="java-requirement ${isInstalled ? 'installed' : 'not-installed'}">
+                    <div class="java-req-icon">
+                        ${isInstalled ?
+                            '<svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' :
+                            '<svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 9.586 8.707 8.707z" clip-rule="evenodd"/></svg>'
+                        }
+                    </div>
+                    <div class="java-req-info">
+                        <h4>Minecraft ${minecraftVersion} 필요 Java 버전: ${requiredInfo.required_java_version}</h4>
+                        <p>${isInstalled ? '✓ 설치됨' : '✗ 설치 필요'}</p>
+                    </div>
+                </div>
+            `;
+
+            // Display installed versions
+            const versionsContainer = document.getElementById('javaVersionsContainer');
+            if (javaInfo.installed_versions.length === 0) {
+                versionsContainer.innerHTML = '<div class="empty-state"><p>설치된 Java가 없습니다</p></div>';
+            } else {
+                versionsContainer.innerHTML = `
+                    <h4 style="margin-bottom: 0.75rem;">설치된 Java 버전</h4>
+                    <div class="java-versions-list">
+                        ${javaInfo.installed_versions.map(java => `
+                            <div class="java-version-item ${java.version === requiredInfo.required_java_version ? 'active' : ''}">
+                                <div class="java-version-info">
+                                    <span class="java-version">Java ${java.version}</span>
+                                    ${java.version === requiredInfo.required_java_version ?
+                                        '<span class="badge">권장</span>' : ''
+                                    }
+                                </div>
+                                <div class="java-version-actions">
+                                    <button class="btn btn-sm btn-danger" onclick="app.deleteJavaVersion(${java.version})">삭제</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            console.error('Failed to load Java info:', error);
+            document.getElementById('javaStatus').innerHTML = `
+                <div class="error-state">
+                    <p>Java 정보를 불러오지 못했습니다</p>
+                </div>
+            `;
+        }
+    }
+
+    async autoInstallJava() {
+        try {
+            const config = await this.apiCall('/config');
+            const minecraftVersion = config.minecraft_version || '1.20.1';
+
+            this.showNotification(`Java 설치 중... (Minecraft ${minecraftVersion} 용)`, 'info');
+
+            const result = await this.apiCall('/java/auto-install', 'POST', {
+                minecraft_version: minecraftVersion
+            });
+
+            this.showNotification(result.message, 'success');
+            await this.loadJavaInfo();
+
+        } catch (error) {
+            console.error('Failed to auto install Java:', error);
+            this.showNotification('Java 자동 설치에 실패했습니다', 'error');
+        }
+    }
+
+    async installJavaVersion(version) {
+        try {
+            this.showNotification(`Java ${version} 설치 중...`, 'info');
+
+            const result = await this.apiCall(`/java/install/${version}`, 'POST');
+
+            this.showNotification(result.message, 'success');
+            await this.loadJavaInfo();
+
+        } catch (error) {
+            console.error('Failed to install Java:', error);
+            this.showNotification(`Java ${version} 설치에 실패했습니다`, 'error');
+        }
+    }
+
+    async deleteJavaVersion(version) {
+        if (!confirm(`Java ${version}을(를) 삭제하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/java/version/${version}`, 'DELETE');
+            this.showNotification(`Java ${version}이(가) 삭제되었습니다`, 'success');
+            await this.loadJavaInfo();
+
+        } catch (error) {
+            console.error('Failed to delete Java:', error);
+            this.showNotification('Java 삭제에 실패했습니다', 'error');
         }
     }
 }

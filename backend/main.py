@@ -614,3 +614,157 @@ async def create_modpack_server(modpack_data: dict):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Java Management Endpoints
+@app.get("/api/java/info")
+async def get_java_info(server_id: Optional[str] = None):
+    """Get information about installed Java versions"""
+    try:
+        manager = await get_current_manager(server_id)
+        return manager.java_manager.get_java_info()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/java/required/{minecraft_version}")
+async def get_required_java_version(minecraft_version: str, server_id: Optional[str] = None):
+    """Get the required Java version for a Minecraft version"""
+    try:
+        manager = await get_current_manager(server_id)
+        version = manager.java_manager.get_required_java_version(minecraft_version)
+        is_installed = await manager.java_manager.is_java_installed(version)
+        java_path = manager.java_manager.get_java_path(version)
+
+        return {
+            "minecraft_version": minecraft_version,
+            "required_java_version": version,
+            "is_installed": is_installed,
+            "java_path": str(java_path) if java_path else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/java/install/{version}")
+async def install_java(version: int, server_id: Optional[str] = None):
+    """Install a specific Java version"""
+    try:
+        manager = await get_current_manager(server_id)
+
+        # Check if already installed
+        if await manager.java_manager.is_java_installed(version):
+            return {
+                "status": "success",
+                "message": f"Java {version} is already installed",
+                "already_installed": True
+            }
+
+        # Install Java
+        success, message = await manager.java_manager.install_java(version)
+
+        if success:
+            return {
+                "status": "success",
+                "message": message,
+                "version": version,
+                "java_path": str(manager.java_manager.get_java_path(version))
+            }
+        else:
+            raise HTTPException(status_code=500, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/java/auto-install")
+async def auto_install_java(install_data: dict, server_id: Optional[str] = None):
+    """Automatically install the required Java version for a Minecraft version"""
+    try:
+        manager = await get_current_manager(server_id)
+        minecraft_version = install_data.get("minecraft_version")
+
+        if not minecraft_version:
+            raise HTTPException(status_code=400, detail="minecraft_version is required")
+
+        success, message, java_version = await manager.java_manager.auto_install_for_minecraft(
+            minecraft_version
+        )
+
+        if success:
+            return {
+                "status": "success",
+                "message": message,
+                "minecraft_version": minecraft_version,
+                "java_version": java_version,
+                "java_path": str(manager.java_manager.get_java_path(java_version))
+            }
+        else:
+            raise HTTPException(status_code=500, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/java/install/{version}")
+async def websocket_java_install(websocket: WebSocket, version: int, server_id: Optional[str] = None):
+    """WebSocket endpoint for Java installation with progress updates"""
+    await websocket.accept()
+    try:
+        manager = await get_current_manager(server_id)
+
+        async def progress_callback(progress: float, status: str):
+            await websocket.send_json({
+                "progress": progress,
+                "status": status
+            })
+
+        success = await manager.java_manager.download_java(version, progress_callback)
+
+        if success:
+            await websocket.send_json({
+                "progress": 100,
+                "status": "completed",
+                "message": f"Java {version} installed successfully"
+            })
+        else:
+            await websocket.send_json({
+                "progress": 0,
+                "status": "failed",
+                "message": f"Failed to install Java {version}"
+            })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        await websocket.send_json({
+            "progress": 0,
+            "status": "error",
+            "message": str(e)
+        })
+    finally:
+        await websocket.close()
+
+
+@app.delete("/api/java/version/{version}")
+async def delete_java_version(version: int, server_id: Optional[str] = None):
+    """Delete a specific Java version"""
+    try:
+        manager = await get_current_manager(server_id)
+        java_dir = manager.java_manager.java_base_dir / f"jdk-{version}"
+
+        if not java_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Java {version} is not installed")
+
+        shutil.rmtree(java_dir)
+
+        return {
+            "status": "success",
+            "message": f"Java {version} deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

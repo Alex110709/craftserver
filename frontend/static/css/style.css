@@ -1732,3 +1732,118 @@ small {
         flex-wrap: wrap;
     }
 }
+
+/* Java Management Styles */
+.java-status {
+    margin-bottom: 1.5rem;
+}
+
+.java-requirement {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 2px solid;
+}
+
+.java-requirement.installed {
+    border-color: var(--success);
+    background: rgba(27, 217, 106, 0.1);
+}
+
+.java-requirement.not-installed {
+    border-color: var(--danger);
+    background: rgba(245, 87, 108, 0.1);
+}
+
+.java-req-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.java-requirement.installed .java-req-icon {
+    background: var(--success);
+    color: white;
+}
+
+.java-requirement.not-installed .java-req-icon {
+    background: var(--danger);
+    color: white;
+}
+
+.java-req-info h4 {
+    margin: 0 0 0.25rem 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.java-req-info p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.java-versions-container {
+    margin-bottom: 1.5rem;
+}
+
+.java-versions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.java-version-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: var(--transition);
+}
+
+.java-version-item.active {
+    border-color: var(--primary);
+    background: rgba(27, 217, 106, 0.1);
+}
+
+.java-version-item:hover {
+    transform: translateX(4px);
+}
+
+.java-version-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.java-version {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.java-version-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.error-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--danger);
+}
