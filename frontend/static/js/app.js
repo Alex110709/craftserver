@@ -1688,10 +1688,7 @@ class CraftServerApp {
                         '<span class="badge">현재 서버</span>' :
                         `<button class="btn btn-sm btn-primary" onclick="app.selectServerFromList('${server.id}')">선택</button>`
                     }
-                    ${this.servers.length > 1 ?
-                        `<button class="btn btn-sm btn-danger" onclick="app.deleteServerConfirm('${server.id}', '${server.name}')">삭제</button>` :
-                        ''
-                    }
+                    <button class="btn btn-sm btn-danger" onclick="app.deleteServerConfirm('${server.id}', '${server.name}')">삭제</button>
                 </div>
             </div>
         `).join('');

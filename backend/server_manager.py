@@ -193,10 +193,6 @@ class ServerManager:
         if server_id not in self.servers:
             return False
 
-        # Can't delete if it's the only server
-        if len(self.servers) == 1:
-            raise Exception("Cannot delete the only server")
-
         # Stop and cleanup manager if exists
         if server_id in self.managers:
             await self.managers[server_id].cleanup()
@@ -207,8 +203,12 @@ class ServerManager:
 
         # Update current server if needed
         if self.current_server_id == server_id:
-            # Set to first available server
-            self.current_server_id = next(iter(self.servers.keys()))
+            if len(self.servers) > 0:
+                # Set to first available server
+                self.current_server_id = next(iter(self.servers.keys()))
+            else:
+                # No servers left, create a default one
+                self._create_default_server()
 
         self._save_servers()
 
